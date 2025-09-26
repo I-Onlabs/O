@@ -61,3 +61,16 @@ This is a prototype for the "Angry Dogs" game concept. The code is structured to
 ## License
 
 This prototype is for demonstration purposes. All game concepts and designs are original creative works.
+## Unity Refactor Blueprint (Angry Dogs)
+
+Production-ready C# scaffolding for the Unity prototype lives under `Assets/Scripts/`. Key highlights:
+
+- `Core/` contains bootstrapper, events, and state machine helpers.
+- `Input/PlayerInputHandler` unifies legacy and new Input System controls with smoothing.
+- `Player/` splits Riley's behaviour into movement, shooting, and Nibble support for SOLID compliance.
+- `Enemies/HoundAIController` implements pooled-friendly hound logic with fear debuffs and attack throttling.
+- `Systems/` hosts reusable services (object pooling, save/load, obstacle spawning and repurposing).
+- `Data/` adds serializable save data and ScriptableObject upgrade definitions.
+- `UI/HUDController` reacts to gameplay events for HUD updates.
+
+See `Docs/AngryDogsArchitecture.md` for a detailed migration plan covering asset workflow, performance, and build considerations.
