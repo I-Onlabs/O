@@ -136,14 +136,36 @@ class Player extends GameObject {
     render(ctx) {
         if (!this.isActive) return;
         
+        // Draw cyberpunk glow effect
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = 15;
+        
         // Draw player body
         ctx.fillStyle = this.color;
         ctx.fillRect(this.x, this.y, this.width, this.height);
         
-        // Draw player details
+        // Draw cyberpunk details
+        ctx.shadowBlur = 0;
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(this.x + 10, this.y + 10, 20, 20); // Head
-        ctx.fillRect(this.x + 15, this.y + 30, 10, 30); // Body
+        
+        // Cyberpunk visor
+        ctx.fillStyle = '#00ffff';
+        ctx.fillRect(this.x + 12, this.y + 12, 16, 8);
+        
+        // Body with tech details
+        ctx.fillStyle = '#333333';
+        ctx.fillRect(this.x + 15, this.y + 30, 10, 30);
+        
+        // Tech lines
+        ctx.strokeStyle = '#00ffff';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(this.x + 5, this.y + 35);
+        ctx.lineTo(this.x + 35, this.y + 35);
+        ctx.moveTo(this.x + 5, this.y + 45);
+        ctx.lineTo(this.x + 35, this.y + 45);
+        ctx.stroke();
         
         // Draw health bar
         this.renderHealthBar(ctx);

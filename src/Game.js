@@ -2,9 +2,12 @@ import Player from './entities/Player.js';
 import Nibble from './entities/Nibble.js';
 import AngryDog from './entities/AngryDog.js';
 import Projectile from './entities/Projectile.js';
+import Obstacle from './entities/Obstacle.js';
+import Boss from './entities/Boss.js';
 import ParticleSystem from './systems/ParticleSystem.js';
 import CollisionSystem from './systems/CollisionSystem.js';
 import InputSystem from './systems/InputSystem.js';
+import AudioSystem from './systems/AudioSystem.js';
 
 /**
  * Main Game class - orchestrates all game systems and entities
@@ -27,6 +30,7 @@ class Game {
         this.inputSystem = new InputSystem();
         this.collisionSystem = new CollisionSystem();
         this.particleSystem = new ParticleSystem();
+        this.audioSystem = new AudioSystem();
         
         // Initialize entities
         this.player = new Player(100, this.height / 2);
@@ -37,12 +41,17 @@ class Game {
         this.projectiles = [];
         this.obstacles = [];
         this.powerUps = [];
+        this.boss = null;
         
         // Spawn timers
         this.obstacleTimer = 0;
         this.obstacleSpawnRate = 120;
         this.dogTimer = 0;
         this.dogSpawnRate = 300;
+        
+        // Boss system
+        this.bossSpawned = false;
+        this.bossSpawnDistance = 5000; // Spawn boss at 5000m
         
         // Performance tracking
         this.lastTime = 0;
@@ -51,6 +60,7 @@ class Game {
         
         this.setupCollisionHandlers();
         this.setupInputHandlers();
+        this.startAudio();
         this.gameLoop();
     }
 
@@ -60,17 +70,18 @@ class Game {
     setupCollisionHandlers() {
         // Projectile vs Obstacles
         this.collisionSystem.registerCollision('projectile', 'obstacle', (projectile, obstacle, projIndex, obsIndex) => {
-            obstacle.takeDamage(projectile.getDamage());
+            const destroyed = obstacle.takeDamage(projectile.getDamage());
             this.projectiles.splice(projIndex, 1);
             this.particleSystem.createExplosion(obstacle.x, obstacle.y, obstacle.color, 8);
             
-            if (!obstacle.isActive) {
+            if (destroyed) {
                 this.obstacles.splice(obsIndex, 1);
                 this.score += 100;
                 this.createPowerUp(obstacle.x, obstacle.y);
+                this.audioSystem.playObstacleDestroyed(obstacle.type);
             }
             
-            return { removeObj1: true, removeObj2: !obstacle.isActive };
+            return { removeObj1: true, removeObj2: destroyed };
         });
 
         // Projectile vs Angry Dogs
@@ -82,6 +93,7 @@ class Game {
             if (died) {
                 this.angryDogs.splice(dogIndex, 1);
                 this.score += 50;
+                this.audioSystem.playExplosion();
             }
             
             return { removeObj1: true, removeObj2: died };
@@ -92,6 +104,7 @@ class Game {
             const died = player.takeDamage(10);
             this.obstacles.splice(obsIndex, 1);
             this.particleSystem.createDamage(player.x, player.y, 10);
+            this.audioSystem.playDamage();
             
             if (died) {
                 this.gameOver();
@@ -130,6 +143,7 @@ class Game {
         this.collisionSystem.registerCollision('player', 'powerUp', (player, powerUp, playerIndex, powerUpIndex) => {
             this.collectPowerUp(powerUp);
             this.powerUps.splice(powerUpIndex, 1);
+            this.audioSystem.playPowerUp();
             
             return { removeObj1: false, removeObj2: true };
         });
@@ -144,6 +158,46 @@ class Game {
             
             return { removeObj1: false, removeObj2: powerUp.type === 'health' };
         });
+
+        // Projectile vs Boss
+        this.collisionSystem.registerCollision('projectile', 'boss', (projectile, boss, projIndex, bossIndex) => {
+            const defeated = boss.takeDamage(projectile.getDamage());
+            this.projectiles.splice(projIndex, 1);
+            this.particleSystem.createExplosion(boss.x, boss.y, boss.color, 12);
+            
+            if (defeated) {
+                this.boss = null;
+                this.bossSpawned = false;
+                this.score += 1000;
+                this.audioSystem.playExplosion();
+            }
+            
+            return { removeObj1: true, removeObj2: defeated };
+        });
+
+        // Player vs Boss
+        this.collisionSystem.registerCollision('player', 'boss', (player, boss, playerIndex, bossIndex) => {
+            const died = player.takeDamage(25);
+            this.particleSystem.createDamage(player.x, player.y, 15);
+            this.audioSystem.playDamage();
+            
+            if (died) {
+                this.gameOver();
+            }
+            
+            return { removeObj1: false, removeObj2: false };
+        });
+    }
+
+    /**
+     * Start audio system
+     */
+    startAudio() {
+        // Resume audio context on first user interaction
+        document.addEventListener('click', () => {
+            this.audioSystem.resumeAudio();
+            this.audioSystem.playBackgroundMusic();
+        }, { once: true });
     }
 
     /**
@@ -180,8 +234,27 @@ class Game {
      * @param {string} direction - Swipe direction
      */
     handleSwipe(direction) {
-        // Mobile control implementation would go here
-        console.log('Swipe detected:', direction);
+        switch (direction) {
+            case 'up':
+                // Jump - move player up
+                this.player.vy = -this.player.speed * 2;
+                break;
+            case 'down':
+                // Slide/Duck - move player down
+                this.player.vy = this.player.speed * 2;
+                break;
+            case 'left':
+                // Move left
+                this.player.vx = -this.player.speed;
+                break;
+            case 'right':
+                // Move right
+                this.player.vx = this.player.speed;
+                break;
+        }
+        
+        // Create visual feedback
+        this.particleSystem.createTrail(this.player.x, this.player.y, '#00ffff', 3);
     }
 
     /**
@@ -200,6 +273,7 @@ class Game {
         this.updateProjectiles(deltaTime);
         this.updateObstacles(deltaTime);
         this.updatePowerUps(deltaTime);
+        this.updateBoss(deltaTime);
 
         // Update systems
         this.particleSystem.update(deltaTime);
@@ -207,6 +281,7 @@ class Game {
         // Spawn new objects
         this.spawnObstacles();
         this.spawnAngryDogs();
+        this.spawnBoss();
 
         // Update game progression
         this.distance += this.speed;
@@ -217,6 +292,7 @@ class Game {
 
         // Check collisions
         this.checkAllCollisions();
+        this.checkBossCollisions();
 
         // Update UI
         this.updateUI();
@@ -298,6 +374,51 @@ class Game {
     }
 
     /**
+     * Check boss-specific collisions
+     */
+    checkBossCollisions() {
+        if (!this.boss) return;
+
+        // Projectile vs Boss
+        this.collisionSystem.checkCollisions(this.projectiles, [this.boss], 'projectile', 'boss');
+        
+        // Player vs Boss
+        this.collisionSystem.checkCollisions([this.player], [this.boss], 'player', 'boss');
+        
+        // Check boss bark bombs vs player
+        if (this.boss.barkBombs) {
+            this.boss.barkBombs.forEach((bomb, index) => {
+                if (this.collisionSystem.checkCollision(this.player, bomb)) {
+                    const died = this.player.takeDamage(bomb.damage);
+                    this.particleSystem.createExplosion(bomb.x, bomb.y, '#ffff00', 8);
+                    this.audioSystem.playDamage();
+                    this.boss.barkBombs.splice(index, 1);
+                    
+                    if (died) {
+                        this.gameOver();
+                    }
+                }
+            });
+        }
+        
+        // Check mini chihuahuas vs player
+        if (this.boss.miniChihuahuas) {
+            this.boss.miniChihuahuas.forEach((mini, index) => {
+                if (this.collisionSystem.checkCollision(this.player, mini)) {
+                    const died = this.player.takeDamage(10);
+                    this.particleSystem.createDamage(this.player.x, this.player.y, 5);
+                    this.audioSystem.playDamage();
+                    this.boss.miniChihuahuas.splice(index, 1);
+                    
+                    if (died) {
+                        this.gameOver();
+                    }
+                }
+            });
+        }
+    }
+
+    /**
      * Spawn obstacles
      */
     spawnObstacles() {
@@ -316,6 +437,27 @@ class Game {
         if (this.dogTimer >= this.dogSpawnRate) {
             this.dogTimer = 0;
             this.createAngryDog();
+        }
+    }
+
+    /**
+     * Spawn boss when distance threshold is reached
+     */
+    spawnBoss() {
+        if (!this.bossSpawned && this.distance >= this.bossSpawnDistance) {
+            this.boss = new Boss(this.width - 150, this.height / 2);
+            this.bossSpawned = true;
+            this.audioSystem.playExplosion(); // Boss entrance sound
+        }
+    }
+
+    /**
+     * Update boss
+     * @param {number} deltaTime - Time elapsed since last update
+     */
+    updateBoss(deltaTime) {
+        if (this.boss) {
+            this.boss.update(this.player, this.nibble, deltaTime);
         }
     }
 
@@ -345,39 +487,8 @@ class Game {
      * @param {number} y - Y position
      */
     createObstacle(type, x, y) {
-        const obstacle = {
-            type: type,
-            x: x,
-            y: y,
-            width: 60,
-            height: 60,
-            health: 3,
-            maxHealth: 3,
-            color: this.getObstacleColor(type),
-            effect: null,
-            isActive: true,
-            vx: 0,
-            vy: 0
-        };
-
+        const obstacle = new Obstacle(type, x, y);
         this.obstacles.push(obstacle);
-    }
-
-    /**
-     * Get color for obstacle type
-     * @param {string} type - Obstacle type
-     * @returns {string} - Color hex code
-     */
-    getObstacleColor(type) {
-        const colors = {
-            'bouncyBoneDrone': '#ff6b6b',
-            'slobberMine': '#4ecdc4',
-            'holoFleaSwarm': '#45b7d1',
-            'runawayDogWalker': '#96ceb4',
-            'kibbleCannon': '#feca57',
-            'neonChewToy': '#ff9ff3'
-        };
-        return colors[type] || '#ffffff';
     }
 
     /**
@@ -409,6 +520,9 @@ class Game {
                 '#ffff00',
                 3
             );
+            
+            // Play shooting sound
+            this.audioSystem.playShoot();
         }
     }
 
@@ -474,6 +588,7 @@ class Game {
     gameOver() {
         this.gameState = 'gameOver';
         this.particleSystem.createExplosion(this.player.x, this.player.y, '#ff0000', 20);
+        this.audioSystem.playGameOver();
     }
 
     /**
@@ -504,6 +619,8 @@ class Game {
         this.angryDogs = [];
         this.projectiles = [];
         this.powerUps = [];
+        this.boss = null;
+        this.bossSpawned = false;
         this.particleSystem.clear();
 
         // Reset timers
@@ -539,6 +656,7 @@ class Game {
         this.drawPowerUps();
         this.drawAngryDogs();
         this.drawProjectiles();
+        this.drawBoss();
         this.particleSystem.render(this.ctx);
 
         // Draw player and Nibble
@@ -560,17 +678,24 @@ class Game {
      * Draw background elements
      */
     drawBackground() {
-        // Draw cyberpunk city skyline
-        this.ctx.fillStyle = 'rgba(0, 255, 255, 0.1)';
+        // Draw cyberpunk city skyline with neon glow
+        this.ctx.shadowColor = '#00ffff';
+        this.ctx.shadowBlur = 10;
+        this.ctx.fillStyle = 'rgba(0, 255, 255, 0.3)';
         for (let i = 0; i < 20; i++) {
             const x = (i * 100 - this.distance * 0.1) % (this.width + 100);
-            const height = 50 + Math.sin(i) * 30;
+            const height = 50 + Math.sin(i + this.distance * 0.01) * 30;
             this.ctx.fillRect(x, this.height - height, 80, height);
         }
+        this.ctx.shadowBlur = 0;
 
-        // Draw neon grid
-        this.ctx.strokeStyle = 'rgba(0, 255, 255, 0.2)';
+        // Draw neon grid with pulsing effect
+        const pulse = Math.sin(this.distance * 0.01) * 0.1 + 0.2;
+        this.ctx.strokeStyle = `rgba(0, 255, 255, ${pulse})`;
         this.ctx.lineWidth = 1;
+        this.ctx.shadowColor = '#00ffff';
+        this.ctx.shadowBlur = 2;
+        
         for (let i = 0; i < this.width; i += 50) {
             this.ctx.beginPath();
             this.ctx.moveTo(i, 0);
@@ -583,6 +708,26 @@ class Game {
             this.ctx.lineTo(this.width, i);
             this.ctx.stroke();
         }
+        this.ctx.shadowBlur = 0;
+
+        // Draw floating particles
+        this.ctx.fillStyle = 'rgba(255, 0, 255, 0.3)';
+        for (let i = 0; i < 10; i++) {
+            const x = (i * 80 + this.distance * 0.05) % (this.width + 20);
+            const y = 50 + Math.sin(i + this.distance * 0.02) * 100;
+            this.ctx.fillRect(x, y, 2, 2);
+        }
+
+        // Draw data streams
+        this.ctx.strokeStyle = 'rgba(0, 255, 0, 0.4)';
+        this.ctx.lineWidth = 2;
+        for (let i = 0; i < 5; i++) {
+            const x = (i * 160 + this.distance * 0.2) % (this.width + 40);
+            this.ctx.beginPath();
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x + 20, this.height);
+            this.ctx.stroke();
+        }
     }
 
     /**
@@ -590,15 +735,7 @@ class Game {
      */
     drawObstacles() {
         this.obstacles.forEach(obstacle => {
-            if (!obstacle.isActive) return;
-            
-            this.ctx.fillStyle = obstacle.color;
-            this.ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
-
-            // Draw obstacle type indicator
-            this.ctx.fillStyle = '#ffffff';
-            this.ctx.font = '12px Arial';
-            this.ctx.fillText(obstacle.type.substring(0, 3).toUpperCase(), obstacle.x + 5, obstacle.y + 15);
+            obstacle.render(this.ctx);
         });
     }
 
@@ -634,6 +771,15 @@ class Game {
         this.projectiles.forEach(projectile => {
             projectile.render(this.ctx);
         });
+    }
+
+    /**
+     * Draw boss
+     */
+    drawBoss() {
+        if (this.boss) {
+            this.boss.render(this.ctx);
+        }
     }
 
     /**
