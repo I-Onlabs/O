@@ -46,7 +46,10 @@ namespace AngryDogs.Gameplay
             ComboStreak,           // Achieve X combo streak
             SpecialObstacle,       // Interact with X special obstacles
             CloudSync,             // Perform X cloud syncs
-            QuipDisplay            // Display X quips
+            QuipDisplay,           // Display X quips
+            NeonSlobberCannons,    // Repurpose X Neon Slobber Cannons
+            CyberChihuahuaKing,    // Defeat Cyber-Chihuahua King X times
+            KibbleCoinCollection   // Collect X KibbleCoins in a single run
         }
 
         public enum DifficultyLevel
@@ -184,6 +187,33 @@ namespace AngryDogs.Gameplay
                 descriptions = new[] { "Display {0} quips", "Show {0} Riley quips", "Trigger {0} Nibble barks" },
                 targetValues = new[] { 5, 10, 15, 25 },
                 kibbleCoinRewards = new[] { 1, 2, 3, 5 },
+                difficulties = new[] { DifficultyLevel.Easy, DifficultyLevel.Medium, DifficultyLevel.Hard, DifficultyLevel.Expert },
+                requiredUpgrades = new[] { new string[0], new string[0], new string[0], new string[0] }
+            },
+            new ChallengeTemplate {
+                type = ChallengeType.NeonSlobberCannons,
+                titles = new[] { "Neon Slobber Master", "Cannon Repurposer", "Goo Trap Specialist" },
+                descriptions = new[] { "Repurpose {0} Neon Slobber Cannons", "Convert {0} cannons into defensive shields", "Turn {0} slobber cannons into traps" },
+                targetValues = new[] { 5, 10, 15, 25 },
+                kibbleCoinRewards = new[] { 3, 6, 10, 18 },
+                difficulties = new[] { DifficultyLevel.Easy, DifficultyLevel.Medium, DifficultyLevel.Hard, DifficultyLevel.Expert },
+                requiredUpgrades = new[] { new string[0], new string[0], new string[0], new string[0] }
+            },
+            new ChallengeTemplate {
+                type = ChallengeType.CyberChihuahuaKing,
+                titles = new[] { "King Slayer", "Mech Destroyer", "Tyrant Hunter" },
+                descriptions = new[] { "Defeat the Cyber-Chihuahua King {0} times", "Take down the tiny tyrant {0} times", "Overthrow the mech-suit king {0} times" },
+                targetValues = new[] { 1, 2, 3, 5 },
+                kibbleCoinRewards = new[] { 8, 15, 25, 40 },
+                difficulties = new[] { DifficultyLevel.Easy, DifficultyLevel.Medium, DifficultyLevel.Hard, DifficultyLevel.Expert },
+                requiredUpgrades = new[] { new string[0], new string[0], new string[0], new string[0] }
+            },
+            new ChallengeTemplate {
+                type = ChallengeType.KibbleCoinCollection,
+                titles = new[] { "KibbleCoin Collector", "Currency Hunter", "Treasure Seeker" },
+                descriptions = new[] { "Collect {0} KibbleCoins in a single run", "Gather {0} KibbleCoins", "Earn {0} KibbleCoins" },
+                targetValues = new[] { 25, 50, 100, 200 },
+                kibbleCoinRewards = new[] { 2, 4, 6, 10 },
                 difficulties = new[] { DifficultyLevel.Easy, DifficultyLevel.Medium, DifficultyLevel.Hard, DifficultyLevel.Expert },
                 requiredUpgrades = new[] { new string[0], new string[0], new string[0], new string[0] }
             }
