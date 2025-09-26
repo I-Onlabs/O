@@ -5,11 +5,14 @@
   "main": "src/main.js",
   "type": "module",
   "scripts": {
-    "start": "python3 -m http.server 8000",
-    "dev": "python3 -m http.server 8000",
-    "build": "echo 'Build system not yet implemented'",
+    "start": "webpack serve --config webpack.dev.cjs",
+    "dev": "webpack serve --config webpack.dev.cjs",
+    "build": "webpack --config webpack.prod.cjs",
+    "build:dev": "webpack --config webpack.dev.cjs",
+    "clean": "rimraf dist",
     "test": "echo 'Tests not yet implemented'",
-    "lint": "echo 'Linting not yet implemented'"
+    "lint": "echo 'Linting not yet implemented'",
+    "serve": "python3 -m http.server 8000"
   },
   "keywords": [
     "game",
@@ -20,8 +23,22 @@
   ],
   "author": "Game Developer",
   "license": "MIT",
-  "devDependencies": {},
-  "dependencies": {},
+  "devDependencies": {
+    "@babel/core": "^7.28.4",
+    "@babel/preset-env": "^7.28.3",
+    "babel-loader": "^10.0.0",
+    "clean-webpack-plugin": "^4.0.0",
+    "copy-webpack-plugin": "^13.0.1",
+    "css-loader": "^7.1.2",
+    "file-loader": "^6.2.0",
+    "html-webpack-plugin": "^5.6.4",
+    "rimraf": "^6.0.1",
+    "style-loader": "^4.0.0",
+    "terser-webpack-plugin": "^5.3.14",
+    "webpack": "^5.101.3",
+    "webpack-cli": "^6.0.1",
+    "webpack-dev-server": "^5.2.2"
+  },
   "engines": {
     "node": ">=14.0.0"
   },
