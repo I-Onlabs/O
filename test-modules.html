@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Module Test - Angry Dogs</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #1a1a1a;
+            color: #ffffff;
+        }
+        .test-result {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+        }
+        .success {
+            background: #2d5a2d;
+            border-left: 4px solid #4caf50;
+        }
+        .error {
+            background: #5a2d2d;
+            border-left: 4px solid #f44336;
+        }
+        #status {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Angry Dogs - Module Test</h1>
+    <div id="status">Testing modules...</div>
+    <div id="results"></div>
+
+    <script type="module">
+        const resultsDiv = document.getElementById('results');
+        const statusDiv = document.getElementById('status');
+        
+        function addResult(test, success, message) {
+            const div = document.createElement('div');
+            div.className = `test-result ${success ? 'success' : 'error'}`;
+            div.innerHTML = `<strong>${test}:</strong> ${message}`;
+            resultsDiv.appendChild(div);
+        }
+        
+        async function runTests() {
+            let allPassed = true;
+            
+            try {
+                // Test GameObject import
+                const { default: GameObject } = await import('./src/core/GameObject.js');
+                addResult('GameObject Import', true, 'Successfully imported');
+                
+                // Test Player import
+                const { default: Player } = await import('./src/entities/Player.js');
+                addResult('Player Import', true, 'Successfully imported');
+                
+                // Test Nibble import
+                const { default: Nibble } = await import('./src/entities/Nibble.js');
+                addResult('Nibble Import', true, 'Successfully imported');
+                
+                // Test AngryDog import
+                const { default: AngryDog } = await import('./src/entities/AngryDog.js');
+                addResult('AngryDog Import', true, 'Successfully imported');
+                
+                // Test Projectile import
+                const { default: Projectile } = await import('./src/entities/Projectile.js');
+                addResult('Projectile Import', true, 'Successfully imported');
+                
+                // Test Systems
+                const { default: ParticleSystem } = await import('./src/systems/ParticleSystem.js');
+                addResult('ParticleSystem Import', true, 'Successfully imported');
+                
+                const { default: CollisionSystem } = await import('./src/systems/CollisionSystem.js');
+                addResult('CollisionSystem Import', true, 'Successfully imported');
+                
+                const { default: InputSystem } = await import('./src/systems/InputSystem.js');
+                addResult('InputSystem Import', true, 'Successfully imported');
+                
+                // Test Game import
+                const { default: Game } = await import('./src/Game.js');
+                addResult('Game Import', true, 'Successfully imported');
+                
+                // Test instantiation
+                const gameObject = new GameObject(10, 10, 20, 20);
+                addResult('GameObject Instantiation', true, 'Created successfully');
+                
+                const player = new Player(100, 100);
+                addResult('Player Instantiation', true, 'Created successfully');
+                
+                const nibble = new Nibble(80, 120);
+                addResult('Nibble Instantiation', true, 'Created successfully');
+                
+                const particleSystem = new ParticleSystem();
+                addResult('ParticleSystem Instantiation', true, 'Created successfully');
+                
+                const collisionSystem = new CollisionSystem();
+                addResult('CollisionSystem Instantiation', true, 'Created successfully');
+                
+                const inputSystem = new InputSystem();
+                addResult('InputSystem Instantiation', true, 'Created successfully');
+                
+            } catch (error) {
+                addResult('Module Test', false, `Error: ${error.message}`);
+                allPassed = false;
+            }
+            
+            statusDiv.textContent = allPassed ? 
+                '✅ All module tests passed!' : 
+                '❌ Some module tests failed!';
+            statusDiv.style.color = allPassed ? '#4caf50' : '#f44336';
+        }
+        
+        runTests();
+    </script>
+</body>
+</html>
