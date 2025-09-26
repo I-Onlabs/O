@@ -42,7 +42,8 @@ namespace AngryDogs.Obstacles
             KibbleVendingBot,    // Spawns sticky pellets that make hounds slip
             HoloPawPrint,        // Creates decoy trails to misguide hounds
             SlimeSlide,          // Existing repurposing target
-            CyberChihuahua       // Boss obstacle
+            CyberChihuahua,      // Boss obstacle
+            NeonSlobberCannon    // New: Spawns goo traps that can be repurposed into defense
         }
 
         private struct ActiveObstacle
@@ -295,6 +296,9 @@ namespace AngryDogs.Obstacles
                 case ObstacleType.HoloPawPrint:
                     ActivateHoloPawPrint(obstacle, hitPoint, definition);
                     break;
+                case ObstacleType.NeonSlobberCannon:
+                    ActivateNeonSlobberCannon(obstacle, hitPoint, definition);
+                    break;
                 case ObstacleType.Standard:
                 default:
                     // Standard repurposing behavior
@@ -433,6 +437,74 @@ namespace AngryDogs.Obstacles
             if (pawPrint != null)
             {
                 Destroy(pawPrint);
+            }
+        }
+
+        /// <summary>
+        /// Activates Neon Slobber Cannon - spawns goo traps that can be repurposed into defense.
+        /// Riley: "Neon slobber cannons? These hounds are getting creative with their attacks!"
+        /// Nibble: "Bark! (Translation: Gooey mess incoming!)"
+        /// </summary>
+        private void ActivateNeonSlobberCannon(GameObject obstacle, Vector3 hitPoint, ObstacleDefinition definition)
+        {
+            Debug.Log("Riley: Neon slobber cannon activated! Time to deal with this gooey mess!");
+            Debug.Log("Nibble: *bark* (Translation: Gooey mess incoming!)");
+
+            // Spawn goo traps in a pattern around the cannon
+            var gooTrapCount = 6;
+            var angleStep = 360f / gooTrapCount;
+            var gooRadius = definition.effectRadius;
+
+            for (int i = 0; i < gooTrapCount; i++)
+            {
+                var angle = i * angleStep * Mathf.Deg2Rad;
+                var direction = new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle));
+                var gooTrapPosition = hitPoint + direction * gooRadius * 0.7f;
+
+                // Create goo trap effect
+                StartCoroutine(CreateGooTrapEffect(gooTrapPosition, definition.effectDuration, i));
+            }
+
+            // Play slobber cannon sound effect
+            PlayClip(definition.repurposedClip);
+            
+            // Remove the original obstacle
+            if (_lookup.TryGetValue(obstacle, out var index))
+            {
+                pooler.Return(obstacle);
+                RemoveAt(index);
+            }
+
+            // Trigger event for UI feedback
+            ObstacleRepurposed?.Invoke(definition, obstacle);
+        }
+
+        /// <summary>
+        /// Creates a goo trap effect that can be repurposed into defense.
+        /// Riley: "These goo traps are like digital slime for cybernetic hounds!"
+        /// </summary>
+        private IEnumerator CreateGooTrapEffect(Vector3 position, float duration, int index)
+        {
+            // Create a goo trap visual effect
+            var gooTrap = new GameObject($"GooTrap_{index}");
+            gooTrap.transform.position = position;
+            
+            // Add a simple visual indicator (in a real game, this would be a neon goo effect)
+            var renderer = gooTrap.AddComponent<MeshRenderer>();
+            var collider = gooTrap.AddComponent<SphereCollider>();
+            collider.radius = 1f;
+            collider.isTrigger = true;
+
+            // Add a component to handle goo trap behavior
+            var gooTrapComponent = gooTrap.AddComponent<GooTrapComponent>();
+            gooTrapComponent.Initialize(duration, index);
+
+            yield return new WaitForSeconds(duration);
+
+            // Clean up
+            if (gooTrap != null)
+            {
+                Destroy(gooTrap);
             }
         }
 

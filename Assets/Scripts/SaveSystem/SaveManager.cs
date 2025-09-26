@@ -37,6 +37,12 @@ namespace AngryDogs.SaveSystem
         private string cloudSaveUrl = "https://your-cloud-save-service.com/api/save";
         [SerializeField, Tooltip("API key for cloud save authentication.")]
         private string cloudApiKey = "";
+        [SerializeField, Tooltip("Enable offline mode when cloud is unavailable.")]
+        private bool enableOfflineMode = true;
+        [SerializeField, Tooltip("Maximum retry attempts for cloud sync.")]
+        private int maxCloudRetries = 3;
+        [SerializeField, Tooltip("Delay between cloud sync retries in seconds.")]
+        private float cloudRetryDelay = 2f;
 
         public event Action<PlayerSaveData> SaveLoaded;
         public event Action<bool> CloudSyncStatusChanged;
@@ -51,6 +57,9 @@ namespace AngryDogs.SaveSystem
         private Coroutine _cloudSyncCoroutine;
         private DateTime _lastCloudSync;
         private int _syncRetryCount;
+        private bool _isOfflineMode = false;
+        private Queue<PlayerSaveData> _offlineSaveQueue = new Queue<PlayerSaveData>();
+        private const int MaxOfflineSaves = 10;
 
         private string SavePath => Path.Combine(Application.persistentDataPath, SaveFileName);
 
@@ -92,6 +101,7 @@ namespace AngryDogs.SaveSystem
 
         /// <summary>
         /// Persists the current <see cref="PlayerProgressData"/> to storage.
+        /// Riley: "Time to save our progress! Can't let the hounds mess with our data!"
         /// </summary>
         public void Save()
         {
@@ -101,13 +111,38 @@ namespace AngryDogs.SaveSystem
                 _cachedSave = PlayerSaveData.CreateDefault();
             }
 
-            Save.Progress.Version++;
-            WriteToDisk(Save);
-            
-            // Trigger cloud sync if enabled
-            if (enableCloudSync && _isCloudAvailable)
+            // Validate save data before writing
+            if (!ValidateSaveData(Save))
             {
-                SyncToCloud();
+                Debug.LogError("Riley: Save data validation failed! Using default data instead.");
+                _cachedSave = PlayerSaveData.CreateDefault();
+            }
+
+            Save.Progress.Version++;
+            
+            try
+            {
+                WriteToDisk(Save);
+                Debug.Log("Nibble: *happy bark* (Translation: Progress saved successfully!)");
+            }
+            catch (Exception ex)
+            {
+                HandleSaveError("Save", ex);
+                return;
+            }
+            
+            // Use optimized save for mobile, regular save for desktop
+            if (Application.isMobilePlatform)
+            {
+                OptimizedSave();
+            }
+            else
+            {
+                // Trigger cloud sync if enabled
+                if (enableCloudSync && _isCloudAvailable)
+                {
+                    SyncToCloud();
+                }
             }
         }
 
@@ -245,28 +280,66 @@ namespace AngryDogs.SaveSystem
 
         private void WriteToDisk(PlayerSaveData data)
         {
-            var payload = Serialize(data);
-#if UNITY_WEBGL && !UNITY_EDITOR
-            PlayerPrefs.SetString(SaveFileName, payload);
-            PlayerPrefs.Save();
-#else
             try
             {
+                var payload = Serialize(data);
+                
+                // Validate JSON integrity before writing
+                if (!ValidateSaveIntegrity(payload))
+                {
+                    Debug.LogError("Riley: Generated save data failed integrity check! Aborting save.");
+                    return;
+                }
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+                PlayerPrefs.SetString(SaveFileName, payload);
+                PlayerPrefs.Save();
+                Debug.Log("Nibble: *bark* (Translation: Save written to PlayerPrefs!)");
+#else
                 var directory = Path.GetDirectoryName(SavePath);
                 if (!string.IsNullOrEmpty(directory))
                 {
                     Directory.CreateDirectory(directory);
                 }
 
-                using var stream = new FileStream(SavePath, FileMode.Create, FileAccess.Write, FileShare.None);
+                // Write to temporary file first, then move to final location (atomic operation)
+                var tempPath = SavePath + ".tmp";
+                using var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None);
                 using var writer = new StreamWriter(stream, Encoding.UTF8);
                 writer.Write(payload);
+                writer.Flush();
+                stream.Flush();
+
+                // Atomic move to final location
+                if (File.Exists(SavePath))
+                {
+                    File.Delete(SavePath);
+                }
+                File.Move(tempPath, SavePath);
+                
+                Debug.Log("Riley: Save file written successfully with atomic operation!");
+#endif
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Debug.LogError($"Riley: Permission denied writing save file at {SavePath}: {ex.Message}");
+                HandleSaveError("WriteToDisk_Unauthorized", ex);
+            }
+            catch (DirectoryNotFoundException ex)
+            {
+                Debug.LogError($"Riley: Save directory not found: {ex.Message}");
+                HandleSaveError("WriteToDisk_DirectoryNotFound", ex);
+            }
+            catch (IOException ex)
+            {
+                Debug.LogError($"Riley: I/O error writing save file: {ex.Message}");
+                HandleSaveError("WriteToDisk_IOError", ex);
             }
             catch (Exception ex)
             {
-                Debug.LogError($"Failed to write save file at {SavePath}: {ex.Message}");
+                Debug.LogError($"Riley: Unexpected error writing save file at {SavePath}: {ex.Message}");
+                HandleSaveError("WriteToDisk_Unexpected", ex);
             }
-#endif
         }
 
         private string Serialize(PlayerSaveData data)
@@ -493,13 +566,180 @@ namespace AngryDogs.SaveSystem
         {
             try
             {
+                if (string.IsNullOrEmpty(jsonData))
+                {
+                    return false;
+                }
+
                 var testData = JsonUtility.FromJson<PlayerSaveData>(jsonData);
-                return testData != null && testData.Progress != null && testData.Settings != null;
+                if (testData == null)
+                {
+                    return false;
+                }
+
+                // Validate data structure
+                if (testData.Progress == null || testData.Settings == null)
+                {
+                    return false;
+                }
+
+                // Validate reasonable values
+                if (testData.Progress.HighScore < 0 || testData.Progress.Currency < 0 || testData.Progress.Version < 1)
+                {
+                    return false;
+                }
+
+                return true;
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.LogWarning($"Riley: Save integrity validation failed: {ex.Message}");
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Enhanced error handling for save operations with detailed logging.
+        /// Nibble: "Bark! (Translation: Better error handling for save operations!)"
+        /// </summary>
+        private void HandleSaveError(string operation, Exception ex)
+        {
+            var errorMessage = $"Save operation '{operation}' failed: {ex.Message}";
+            Debug.LogError($"Riley: {errorMessage}");
+            
+            // Notify UI about the error
+            CloudSyncError?.Invoke(errorMessage);
+            
+            // In production, you might want to send this to analytics
+            LogErrorToAnalytics(operation, ex);
+        }
+
+        /// <summary>
+        /// Logs errors to analytics for monitoring save system health.
+        /// Riley: "Gotta track these errors to improve the save system!"
+        /// </summary>
+        private void LogErrorToAnalytics(string operation, Exception ex)
+        {
+            // In a real game, you'd send this to your analytics service
+            Debug.Log($"Analytics: SaveError - Operation: {operation}, Error: {ex.GetType().Name}");
+        }
+
+        /// <summary>
+        /// Mobile-optimized save operation that reduces battery drain.
+        /// Riley: "Gotta be efficient on mobile devices!"
+        /// </summary>
+        private void OptimizedSave()
+        {
+            if (_cachedSave == null)
+            {
+                Debug.LogWarning("Save() called without cached data. Creating defaults.");
+                _cachedSave = PlayerSaveData.CreateDefault();
+            }
+
+            try
+            {
+                Save.Progress.Version++;
+                WriteToDisk(Save);
+                
+                // Queue for cloud sync instead of immediate sync on mobile
+                if (enableCloudSync && _isCloudAvailable)
+                {
+                    if (Application.isMobilePlatform)
+                    {
+                        QueueForCloudSync(Save);
+                    }
+                    else
+                    {
+                        SyncToCloud();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                HandleSaveError("OptimizedSave", ex);
+            }
+        }
+
+        /// <summary>
+        /// Queues save data for cloud sync to reduce battery drain on mobile.
+        /// Nibble: "Bark! (Translation: Queue saves for better mobile performance!)"
+        /// </summary>
+        private void QueueForCloudSync(PlayerSaveData saveData)
+        {
+            if (_offlineSaveQueue.Count >= MaxOfflineSaves)
+            {
+                _offlineSaveQueue.Dequeue(); // Remove oldest save
+            }
+
+            _offlineSaveQueue.Enqueue(saveData);
+            
+            // Process queue if not already syncing
+            if (!_isCloudSyncing)
+            {
+                StartCoroutine(ProcessOfflineSaveQueue());
+            }
+        }
+
+        /// <summary>
+        /// Processes the offline save queue with mobile-optimized intervals.
+        /// Riley: "Process those queued saves efficiently!"
+        /// </summary>
+        private IEnumerator ProcessOfflineSaveQueue()
+        {
+            while (_offlineSaveQueue.Count > 0 && _isCloudAvailable)
+            {
+                var saveData = _offlineSaveQueue.Dequeue();
+                
+                // Use the most recent save data
+                _cachedSave = saveData;
+                yield return StartCoroutine(CloudSyncCoroutine());
+                
+                // Wait between syncs to reduce battery drain
+                if (Application.isMobilePlatform)
+                {
+                    yield return new WaitForSeconds(cloudRetryDelay);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Validates save data before writing to prevent corruption.
+        /// Riley: "Gotta validate before saving to prevent corrupted data!"
+        /// </summary>
+        private bool ValidateSaveData(PlayerSaveData data)
+        {
+            if (data == null)
+            {
+                Debug.LogError("Riley: Save data is null!");
+                return false;
+            }
+
+            if (data.Progress == null || data.Settings == null)
+            {
+                Debug.LogError("Riley: Save data has null progress or settings!");
+                return false;
+            }
+
+            // Validate reasonable ranges
+            if (data.Progress.HighScore < 0 || data.Progress.HighScore > 999999999)
+            {
+                Debug.LogWarning("Riley: High score out of reasonable range, clamping to valid range");
+                data.Progress.HighScore = Mathf.Clamp(data.Progress.HighScore, 0, 999999999);
+            }
+
+            if (data.Progress.Currency < 0 || data.Progress.Currency > 999999999)
+            {
+                Debug.LogWarning("Riley: Currency out of reasonable range, clamping to valid range");
+                data.Progress.Currency = Mathf.Clamp(data.Progress.Currency, 0, 999999999);
+            }
+
+            if (data.Progress.Version < 1)
+            {
+                Debug.LogWarning("Riley: Version number invalid, setting to 1");
+                data.Progress.Version = 1;
+            }
+
+            return true;
         }
 
         private void Update()

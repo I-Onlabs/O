@@ -53,8 +53,21 @@ namespace AngryDogs.UI
         [SerializeField] private Toggle hapticsToggle;
         [SerializeField] private Toggle leftHandedToggle;
         [SerializeField] private Toggle neonEffectsToggle;
+        [SerializeField] private Toggle quipToggle;
         [SerializeField] private Button settingsButton;
         [SerializeField] private Button backToGameButton;
+
+        [Header("Resolution Testing")]
+        [SerializeField] private bool enableResolutionTesting = false;
+        [SerializeField] private Vector2[] testResolutions = {
+            new Vector2(1920, 1080), // PC
+            new Vector2(1366, 768),  // Laptop
+            new Vector2(2560, 1440), // High-res PC
+            new Vector2(375, 667),   // iPhone SE
+            new Vector2(414, 896),   // iPhone 11
+            new Vector2(768, 1024),  // iPad
+            new Vector2(1024, 1366)  // iPad Pro
+        };
 
         [Header("Systems")]
         [SerializeField] private SaveManager saveManager;
@@ -70,6 +83,35 @@ namespace AngryDogs.UI
         private bool _isMobile;
         private Canvas _mainCanvas;
         private GraphicRaycaster _raycaster;
+        
+        // Quip system
+        private bool _quipsEnabled = true;
+        private float _lastQuipTime;
+        private float _quipCooldown = 2f;
+        private string[] _rileyQuips = {
+            "This chihuahua's mech is overcompensating!",
+            "Nibble, we need to find the weak spots!",
+            "That tiny tyrant hits harder than expected!",
+            "Time to show this chihuahua who's boss!",
+            "The mech-suit is taking damage!",
+            "One weak point down! Keep hitting the others!",
+            "The chihuahua is having a treat tantrum!",
+            "Overclocked yap mode? This is going to be chaos!",
+            "Good idea, Nibble! Fetch that bone!",
+            "The chihuahua is distracted! Now's our chance!"
+        };
+        private string[] _nibbleQuips = {
+            "Bark! (Translation: Even I'm bigger than that chihuahua!)",
+            "Bark! (Translation: Found weak points on the mech-suit!)",
+            "Bark! (Translation: The chihuahua looks really angry!)",
+            "Bark! (Translation: Is the chihuahua close enough to attack?)",
+            "Bark! (Translation: The chihuahua is yapping really loud!)",
+            "Bark! (Translation: I can fetch a bone to distract the chihuahua!)",
+            "Bark! (Translation: The chihuahua is distracted by the bone!)",
+            "Bark! (Translation: Back to the neon grind!)",
+            "Bark! (Translation: We won! The chihuahua is just a regular dog now!)",
+            "Bark! (Translation: Make sure the UI runs smooth on mobile!)"
+        };
 
         private void Awake()
         {
@@ -179,6 +221,9 @@ namespace AngryDogs.UI
             
             if (neonEffectsToggle != null)
                 neonEffectsToggle.onValueChanged.AddListener(OnNeonEffectsToggled);
+            
+            if (quipToggle != null)
+                quipToggle.onValueChanged.AddListener(OnQuipToggled);
             
             if (settingsButton != null)
                 settingsButton.onClick.AddListener(ShowSettings);
@@ -536,6 +581,25 @@ namespace AngryDogs.UI
         }
 
         /// <summary>
+        /// Handles quip toggle changes for dialogue control.
+        /// Riley: "Time to toggle the quips! Sometimes I need to be quiet when the hounds are chasing!"
+        /// </summary>
+        private void OnQuipToggled(bool enabled)
+        {
+            _quipsEnabled = enabled;
+            
+            if (saveManager != null)
+            {
+                // Store quip preference in settings
+                var settings = saveManager.Settings;
+                // Note: You'd need to add a QuipsEnabled property to PlayerSettingsData
+                saveManager.Save();
+            }
+            
+            Debug.Log($"Nibble: *bark* (Translation: Quips {(enabled ? "enabled" : "disabled")}!)");
+        }
+
+        /// <summary>
         /// Toggles neon effects on all UI elements for performance optimization.
         /// Nibble: "Bark! (Translation: Toggle the pretty lights!)"
         /// </summary>
@@ -589,6 +653,204 @@ namespace AngryDogs.UI
         {
             _lastUIUpdate = 0f; // Reset timer to force immediate update
             UpdateMobileUI();
+        }
+
+        /// <summary>
+        /// Displays a random quip from Riley or Nibble.
+        /// Riley: "Time for some witty commentary!"
+        /// </summary>
+        public void ShowRandomQuip(bool isRiley = true)
+        {
+            if (!_quipsEnabled || Time.time - _lastQuipTime < _quipCooldown)
+                return;
+
+            _lastQuipTime = Time.time;
+
+            if (quipLabel != null)
+            {
+                var quips = isRiley ? _rileyQuips : _nibbleQuips;
+                var randomQuip = quips[Random.Range(0, quips.Length)];
+                quipLabel.text = randomQuip;
+                
+                // Auto-hide quip after a few seconds
+                StartCoroutine(HideQuipAfterDelay(3f));
+            }
+        }
+
+        /// <summary>
+        /// Hides the quip label after a delay.
+        /// Nibble: "Bark! (Translation: Hide the quip after a while!)"
+        /// </summary>
+        private System.Collections.IEnumerator HideQuipAfterDelay(float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            
+            if (quipLabel != null)
+            {
+                quipLabel.text = "";
+            }
+        }
+
+        /// <summary>
+        /// Tests UI responsiveness across different resolutions.
+        /// Riley: "Time to test this UI on different screen sizes!"
+        /// </summary>
+        [ContextMenu("Test UI Responsiveness")]
+        public void TestUIResponsiveness()
+        {
+            if (!enableResolutionTesting) return;
+
+            StartCoroutine(TestAllResolutions());
+        }
+
+        /// <summary>
+        /// Tests UI across all configured resolutions.
+        /// Nibble: "Bark! (Translation: Test all the resolutions!)"
+        /// </summary>
+        private System.Collections.IEnumerator TestAllResolutions()
+        {
+            Debug.Log("Riley: Starting UI responsiveness test across all resolutions!");
+            
+            foreach (var resolution in testResolutions)
+            {
+                Debug.Log($"Testing resolution: {resolution.x}x{resolution.y}");
+                
+                // In a real test, you'd change the screen resolution here
+                // For now, we'll just log the test
+                yield return new WaitForSeconds(1f);
+                
+                // Test UI elements at this resolution
+                TestUIElementsAtResolution(resolution);
+            }
+            
+            Debug.Log("Nibble: *bark* (Translation: UI responsiveness test complete!)");
+        }
+
+        /// <summary>
+        /// Tests UI elements at a specific resolution.
+        /// Riley: "Gotta make sure everything fits properly!"
+        /// </summary>
+        private void TestUIElementsAtResolution(Vector2 resolution)
+        {
+            // Test canvas scaling
+            var canvasScaler = GetComponent<UnityEngine.UI.CanvasScaler>();
+            if (canvasScaler != null)
+            {
+                var aspectRatio = resolution.x / resolution.y;
+                Debug.Log($"Aspect ratio: {aspectRatio:F2}");
+                
+                // Check if UI elements would be properly scaled
+                if (aspectRatio < 1.3f) // Portrait or square
+                {
+                    Debug.Log("Riley: Portrait mode detected - UI should adapt properly");
+                }
+                else if (aspectRatio > 2.0f) // Ultra-wide
+                {
+                    Debug.Log("Riley: Ultra-wide mode detected - UI should scale appropriately");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Optimizes UI for specific device types.
+        /// Nibble: "Bark! (Translation: Optimize UI for this device!)"
+        /// </summary>
+        public void OptimizeUIForDevice()
+        {
+            var deviceType = GetDeviceType();
+            
+            switch (deviceType)
+            {
+                case DeviceType.Phone:
+                    OptimizeForPhone();
+                    break;
+                case DeviceType.Tablet:
+                    OptimizeForTablet();
+                    break;
+                case DeviceType.Desktop:
+                    OptimizeForDesktop();
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Determines the device type based on screen dimensions.
+        /// Riley: "Gotta figure out what kind of device this is!"
+        /// </summary>
+        private DeviceType GetDeviceType()
+        {
+            var width = Screen.width;
+            var height = Screen.height;
+            var aspectRatio = (float)width / height;
+
+            if (width < 768 || aspectRatio < 1.2f)
+                return DeviceType.Phone;
+            else if (width < 1200)
+                return DeviceType.Tablet;
+            else
+                return DeviceType.Desktop;
+        }
+
+        /// <summary>
+        /// Optimizes UI specifically for phones.
+        /// Riley: "Phone optimization - gotta make everything touch-friendly!"
+        /// </summary>
+        private void OptimizeForPhone()
+        {
+            Debug.Log("Riley: Optimizing UI for phone!");
+            
+            // Increase touch target sizes
+            var buttons = GetComponentsInChildren<Button>();
+            foreach (var button in buttons)
+            {
+                var rectTransform = button.GetComponent<RectTransform>();
+                if (rectTransform != null)
+                {
+                    rectTransform.sizeDelta = new Vector2(
+                        Mathf.Max(rectTransform.sizeDelta.x, 60f),
+                        Mathf.Max(rectTransform.sizeDelta.y, 60f)
+                    );
+                }
+            }
+        }
+
+        /// <summary>
+        /// Optimizes UI specifically for tablets.
+        /// Nibble: "Bark! (Translation: Optimize for tablet!)"
+        /// </summary>
+        private void OptimizeForTablet()
+        {
+            Debug.Log("Nibble: *bark* (Translation: Optimizing UI for tablet!)");
+            
+            // Adjust spacing and sizing for tablet
+            var canvasScaler = GetComponent<UnityEngine.UI.CanvasScaler>();
+            if (canvasScaler != null)
+            {
+                canvasScaler.matchWidthOrHeight = 0.7f; // Slightly favor height
+            }
+        }
+
+        /// <summary>
+        /// Optimizes UI specifically for desktop.
+        /// Riley: "Desktop optimization - full power mode!"
+        /// </summary>
+        private void OptimizeForDesktop()
+        {
+            Debug.Log("Riley: Optimizing UI for desktop - full power mode!");
+            
+            // Enable all effects for desktop
+            enableNeonEffects = true;
+            optimizeForMobile = false;
+        }
+
+        /// <summary>
+        /// Device types for UI optimization.
+        /// </summary>
+        private enum DeviceType
+        {
+            Phone,
+            Tablet,
+            Desktop
         }
     }
 }

@@ -41,6 +41,32 @@ namespace AngryDogs.Enemies
             public AudioClip tantrumSound;
         }
 
+        [System.Serializable]
+        public class OverclockedYapPhase
+        {
+            public string name = "Overclocked Yap Mode";
+            public float duration = 15f;
+            public float damageMultiplier = 3f;
+            public float speedMultiplier = 2f;
+            public float attackIntervalMultiplier = 0.5f;
+            public GameObject visualEffect;
+            public AudioClip yapSound;
+            public ParticleSystem yapParticles;
+            public float yapRadius = 8f;
+            public int yapCount = 5;
+        }
+
+        [System.Serializable]
+        public class DecoyBoneInteraction
+        {
+            public GameObject decoyBonePrefab;
+            public float distractionDuration = 8f;
+            public float distractionRadius = 5f;
+            public AudioClip boneFetchSound;
+            public AudioClip distractionSound;
+            public ParticleSystem boneEffect;
+        }
+
         [Header("Boss Stats")]
         [SerializeField] private float maxHealth = 500f;
         [SerializeField] private float attackDamage = 25f;
@@ -56,6 +82,15 @@ namespace AngryDogs.Enemies
         [SerializeField] private TreatTantrumPhase treatTantrumPhase;
         [SerializeField] private float tantrumTriggerHealth = 0.3f; // Trigger at 30% health
         [SerializeField] private float tantrumCooldown = 15f;
+
+        [Header("Overclocked Yap Mode")]
+        [SerializeField] private OverclockedYapPhase overclockedYapPhase;
+        [SerializeField] private float yapTriggerHealth = 0.15f; // Trigger at 15% health
+        [SerializeField] private float yapCooldown = 20f;
+
+        [Header("Nibble Interactions")]
+        [SerializeField] private DecoyBoneInteraction decoyBoneInteraction;
+        [SerializeField] private float boneFetchCooldown = 10f;
 
         [Header("Targets")]
         [SerializeField] private Transform riley;
@@ -83,16 +118,26 @@ namespace AngryDogs.Enemies
         // Boss state
         private bool _isInTantrum = false;
         private bool _canTantrum = true;
+        private bool _isInOverclockedYap = false;
+        private bool _canYap = true;
+        private bool _isDistracted = false;
+        private bool _canFetchBone = true;
         private float _lastAttackTime;
         private int _destroyedWeakPoints = 0;
         private Vector3 _lastKnownRileyPosition;
         private bool _isDefeated = false;
+        private GameObject _currentDecoyBone;
+        private float _distractionEndTime;
 
         // Events
         public System.Action<BossHound> OnBossDefeated;
         public System.Action<WeakPoint> OnWeakPointDestroyed;
         public System.Action OnTreatTantrumStarted;
         public System.Action OnTreatTantrumEnded;
+        public System.Action OnOverclockedYapStarted;
+        public System.Action OnOverclockedYapEnded;
+        public System.Action OnBossDistracted;
+        public System.Action OnBossDistractionEnded;
 
         private void Awake()
         {
@@ -181,6 +226,12 @@ namespace AngryDogs.Enemies
                 // Check for treat tantrum trigger
                 CheckTreatTantrumTrigger();
 
+                // Check for overclocked yap mode trigger
+                CheckOverclockedYapTrigger();
+
+                // Check for distraction status
+                CheckDistractionStatus();
+
                 yield return new WaitForSeconds(0.1f);
             }
         }
@@ -191,12 +242,19 @@ namespace AngryDogs.Enemies
         /// </summary>
         private bool CanAttack()
         {
-            if (riley == null) return false;
+            if (riley == null || _isDistracted) return false;
             
             var distance = Vector3.Distance(transform.position, riley.position);
             var timeSinceLastAttack = Time.time - _lastAttackTime;
             
-            return distance <= attackRange && timeSinceLastAttack >= attackInterval;
+            // Adjust attack interval based on current phase
+            var currentAttackInterval = attackInterval;
+            if (_isInOverclockedYap)
+            {
+                currentAttackInterval *= overclockedYapPhase.attackIntervalMultiplier;
+            }
+            
+            return distance <= attackRange && timeSinceLastAttack >= currentAttackInterval;
         }
 
         /// <summary>
@@ -229,7 +287,12 @@ namespace AngryDogs.Enemies
             // Deal damage to Riley
             if (rileyHealth != null)
             {
-                var damage = _isInTantrum ? attackDamage * treatTantrumPhase.damageMultiplier : attackDamage;
+                var damage = attackDamage;
+                if (_isInTantrum)
+                    damage *= treatTantrumPhase.damageMultiplier;
+                else if (_isInOverclockedYap)
+                    damage *= overclockedYapPhase.damageMultiplier;
+                
                 rileyHealth.TakeDamage(damage);
                 
                 Debug.Log($"Riley: Ouch! The Cyber-Chihuahua King dealt {damage} damage!");
@@ -251,12 +314,18 @@ namespace AngryDogs.Enemies
         /// </summary>
         private void MoveTowardsTarget()
         {
-            if (riley == null) return;
+            if (riley == null || _isDistracted) return;
 
             _agent.SetDestination(riley.position);
             
-            // Update speed based on tantrum state
-            _agent.speed = _isInTantrum ? moveSpeed * treatTantrumPhase.speedMultiplier : moveSpeed;
+            // Update speed based on current phase
+            var currentSpeed = moveSpeed;
+            if (_isInTantrum)
+                currentSpeed *= treatTantrumPhase.speedMultiplier;
+            else if (_isInOverclockedYap)
+                currentSpeed *= overclockedYapPhase.speedMultiplier;
+            
+            _agent.speed = currentSpeed;
         }
 
         /// <summary>
@@ -265,12 +334,39 @@ namespace AngryDogs.Enemies
         /// </summary>
         private void CheckTreatTantrumTrigger()
         {
-            if (_isInTantrum || !_canTantrum) return;
+            if (_isInTantrum || !_canTantrum || _isInOverclockedYap) return;
 
             var healthPercentage = _healthComponent.CurrentHealth / _healthComponent.MaxHealth;
             if (healthPercentage <= tantrumTriggerHealth)
             {
                 StartCoroutine(TriggerTreatTantrum());
+            }
+        }
+
+        /// <summary>
+        /// Checks if overclocked yap mode should be triggered.
+        /// Riley: "Oh no! The chihuahua is going into overclocked yap mode! This is going to be chaos!"
+        /// </summary>
+        private void CheckOverclockedYapTrigger()
+        {
+            if (_isInOverclockedYap || !_canYap || _isInTantrum) return;
+
+            var healthPercentage = _healthComponent.CurrentHealth / _healthComponent.MaxHealth;
+            if (healthPercentage <= yapTriggerHealth)
+            {
+                StartCoroutine(TriggerOverclockedYap());
+            }
+        }
+
+        /// <summary>
+        /// Checks if the boss is currently distracted by a decoy bone.
+        /// Nibble: "Bark! (Translation: Is the chihuahua distracted by the bone?)"
+        /// </summary>
+        private void CheckDistractionStatus()
+        {
+            if (_isDistracted && Time.time >= _distractionEndTime)
+            {
+                EndDistraction();
             }
         }
 
@@ -338,6 +434,205 @@ namespace AngryDogs.Enemies
             _canTantrum = true;
             
             Debug.Log("Nibble: *bark* (Translation: The chihuahua can tantrum again!)");
+        }
+
+        /// <summary>
+        /// Triggers the overclocked yap mode phase.
+        /// Riley: "The chihuahua is going into overclocked yap mode! This is going to be absolute chaos!"
+        /// </summary>
+        private IEnumerator TriggerOverclockedYap()
+        {
+            _isInOverclockedYap = true;
+            _canYap = false;
+            
+            Debug.Log("Riley: The Cyber-Chihuahua King is entering OVERCLOCKED YAP MODE! This is going to be insane!");
+            
+            // Play yap effects
+            if (overclockedYapPhase.yapParticles != null)
+                overclockedYapPhase.yapParticles.Play();
+            
+            if (bossAudioSource != null && overclockedYapPhase.yapSound != null)
+                bossAudioSource.PlayOneShot(overclockedYapPhase.yapSound);
+
+            // Activate visual effects
+            if (overclockedYapPhase.visualEffect != null)
+                overclockedYapPhase.visualEffect.SetActive(true);
+
+            OnOverclockedYapStarted?.Invoke();
+
+            // Perform multiple yap attacks
+            for (int i = 0; i < overclockedYapPhase.yapCount; i++)
+            {
+                yield return StartCoroutine(PerformYapAttack());
+                yield return new WaitForSeconds(0.5f);
+            }
+
+            // Yap mode duration
+            yield return new WaitForSeconds(overclockedYapPhase.duration);
+
+            // End yap mode
+            EndOverclockedYap();
+        }
+
+        /// <summary>
+        /// Performs a yap attack that affects a radius around the boss.
+        /// Nibble: "Bark! (Translation: The chihuahua is yapping really loud!)"
+        /// </summary>
+        private IEnumerator PerformYapAttack()
+        {
+            // Create yap effect in radius
+            var yapPosition = transform.position;
+            var yapRadius = overclockedYapPhase.yapRadius;
+
+            // Damage all targets in radius
+            var colliders = Physics.OverlapSphere(yapPosition, yapRadius);
+            foreach (var collider in colliders)
+            {
+                if (collider.CompareTag("Player") && rileyHealth != null)
+                {
+                    var damage = attackDamage * overclockedYapPhase.damageMultiplier * 0.3f; // Reduced damage per yap
+                    rileyHealth.TakeDamage(damage);
+                    Debug.Log($"Riley: The yap attack hit me for {damage} damage!");
+                }
+                else if (collider.CompareTag("Nibble") && nibbleHealth != null)
+                {
+                    var damage = attackDamage * overclockedYapPhase.damageMultiplier * 0.2f; // Even less damage to Nibble
+                    nibbleHealth.TakeDamage(damage);
+                    Debug.Log("Nibble: *yelp* (Translation: The yap attack got me too!)");
+                }
+            }
+
+            // Play yap sound
+            if (bossAudioSource != null && overclockedYapPhase.yapSound != null)
+                bossAudioSource.PlayOneShot(overclockedYapPhase.yapSound);
+
+            yield return new WaitForSeconds(0.1f);
+        }
+
+        /// <summary>
+        /// Ends the overclocked yap mode phase.
+        /// Riley: "The overclocked yap mode is over, but that chihuahua is still dangerous!"
+        /// </summary>
+        private void EndOverclockedYap()
+        {
+            _isInOverclockedYap = false;
+            
+            // Stop yap effects
+            if (overclockedYapPhase.yapParticles != null)
+                overclockedYapPhase.yapParticles.Stop();
+            
+            if (overclockedYapPhase.visualEffect != null)
+                overclockedYapPhase.visualEffect.SetActive(false);
+
+            OnOverclockedYapEnded?.Invoke();
+
+            // Start cooldown
+            StartCoroutine(YapCooldown());
+            
+            Debug.Log("Riley: The overclocked yap mode is over, but that chihuahua is still dangerous!");
+        }
+
+        /// <summary>
+        /// Handles yap mode cooldown period.
+        /// Riley: "The chihuahua is recovering from its overclocked yap mode..."
+        /// </summary>
+        private IEnumerator YapCooldown()
+        {
+            yield return new WaitForSeconds(yapCooldown);
+            _canYap = true;
+            
+            Debug.Log("Nibble: *bark* (Translation: The chihuahua can yap again!)");
+        }
+
+        /// <summary>
+        /// Allows Nibble to fetch a decoy bone to distract the boss.
+        /// Nibble: "Bark! (Translation: I can fetch a bone to distract the chihuahua!)"
+        /// </summary>
+        public bool TryFetchDecoyBone()
+        {
+            if (!_canFetchBone || _isDefeated) return false;
+
+            StartCoroutine(FetchDecoyBone());
+            return true;
+        }
+
+        /// <summary>
+        /// Nibble fetches a decoy bone to distract the boss.
+        /// Riley: "Good idea, Nibble! Fetch that bone and distract the chihuahua!"
+        /// </summary>
+        private IEnumerator FetchDecoyBone()
+        {
+            _canFetchBone = false;
+            
+            Debug.Log("Nibble: *excited bark* (Translation: I'm fetching a decoy bone!)");
+            
+            // Play fetch sound
+            if (bossAudioSource != null && decoyBoneInteraction.boneFetchSound != null)
+                bossAudioSource.PlayOneShot(decoyBoneInteraction.boneFetchSound);
+
+            // Create decoy bone
+            if (decoyBoneInteraction.decoyBonePrefab != null)
+            {
+                var bonePosition = transform.position + Vector3.forward * 3f; // Place bone in front of boss
+                _currentDecoyBone = Instantiate(decoyBoneInteraction.decoyBonePrefab, bonePosition, Quaternion.identity);
+                
+                // Add bone effect
+                if (decoyBoneInteraction.boneEffect != null)
+                {
+                    var boneEffect = Instantiate(decoyBoneInteraction.boneEffect, bonePosition, Quaternion.identity);
+                    Destroy(boneEffect.gameObject, 3f);
+                }
+            }
+
+            // Distract the boss
+            StartDistraction();
+
+            // Start cooldown
+            yield return new WaitForSeconds(boneFetchCooldown);
+            _canFetchBone = true;
+            
+            Debug.Log("Nibble: *bark* (Translation: I can fetch another bone now!)");
+        }
+
+        /// <summary>
+        /// Starts distracting the boss with the decoy bone.
+        /// Riley: "The chihuahua is distracted by the bone! Now's our chance!"
+        /// </summary>
+        private void StartDistraction()
+        {
+            _isDistracted = true;
+            _distractionEndTime = Time.time + decoyBoneInteraction.distractionDuration;
+            
+            // Play distraction sound
+            if (bossAudioSource != null && decoyBoneInteraction.distractionSound != null)
+                bossAudioSource.PlayOneShot(decoyBoneInteraction.distractionSound);
+
+            // Stop the boss from moving
+            _agent.ResetPath();
+            
+            OnBossDistracted?.Invoke();
+            
+            Debug.Log("Riley: The Cyber-Chihuahua King is distracted by the decoy bone! Perfect timing!");
+        }
+
+        /// <summary>
+        /// Ends the distraction effect.
+        /// Riley: "The chihuahua is no longer distracted. Back to the fight!"
+        /// </summary>
+        private void EndDistraction()
+        {
+            _isDistracted = false;
+            
+            // Clean up decoy bone
+            if (_currentDecoyBone != null)
+            {
+                Destroy(_currentDecoyBone);
+                _currentDecoyBone = null;
+            }
+            
+            OnBossDistractionEnded?.Invoke();
+            
+            Debug.Log("Riley: The chihuahua is no longer distracted. Back to the fight!");
         }
 
         /// <summary>
@@ -500,7 +795,34 @@ namespace AngryDogs.Enemies
         /// Gets the boss's current phase name.
         /// Nibble: "Bark! (Translation: What phase is the chihuahua in?)"
         /// </summary>
-        public string CurrentPhase => _isInTantrum ? treatTantrumPhase.name : "Normal";
+        public string CurrentPhase
+        {
+            get
+            {
+                if (_isInOverclockedYap) return overclockedYapPhase.name;
+                if (_isInTantrum) return treatTantrumPhase.name;
+                if (_isDistracted) return "Distracted";
+                return "Normal";
+            }
+        }
+
+        /// <summary>
+        /// Checks if the boss is in overclocked yap mode.
+        /// Riley: "Is that chihuahua in overclocked yap mode?"
+        /// </summary>
+        public bool IsInOverclockedYap => _isInOverclockedYap;
+
+        /// <summary>
+        /// Checks if the boss is currently distracted.
+        /// Nibble: "Bark! (Translation: Is the chihuahua distracted?)"
+        /// </summary>
+        public bool IsDistracted => _isDistracted;
+
+        /// <summary>
+        /// Checks if Nibble can fetch a decoy bone.
+        /// Riley: "Can Nibble fetch a decoy bone right now?"
+        /// </summary>
+        public bool CanFetchDecoyBone => _canFetchBone && !_isDefeated;
 
         private void OnDrawGizmosSelected()
         {
