@@ -162,14 +162,32 @@ class Nibble extends GameObject {
     render(ctx) {
         if (!this.isActive) return;
         
+        // Draw cyberpunk glow effect
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = 10;
+        
         // Draw Nibble body
         ctx.fillStyle = this.color;
         ctx.fillRect(this.x, this.y, this.width, this.height);
         
-        // Draw Nibble details
+        // Draw cyberpunk details
+        ctx.shadowBlur = 0;
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(this.x + 5, this.y + 5, 15, 15); // Head
-        ctx.fillRect(this.x + 10, this.y + 20, 5, 5); // Body
+        
+        // Cyberpunk eyes
+        ctx.fillStyle = '#00ff00';
+        ctx.fillRect(this.x + 7, this.y + 7, 3, 3);
+        ctx.fillRect(this.x + 12, this.y + 7, 3, 3);
+        
+        // Body with tech details
+        ctx.fillStyle = '#333333';
+        ctx.fillRect(this.x + 10, this.y + 20, 5, 5);
+        
+        // Tech collar
+        ctx.strokeStyle = '#00ffff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(this.x + 3, this.y + 3, 19, 19);
         
         // Draw fetching indicator
         if (this.isFetching) {
