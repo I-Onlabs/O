@@ -22,9 +22,9 @@ namespace AngryDogs.SaveSystem
         [SerializeField, Tooltip("Encrypt save payload lightly to deter casual tampering.")]
         private bool obfuscatePayload = true;
 
-        public event Action<PlayerProgressData> SaveLoaded;
+        public event Action<PlayerSaveData> SaveLoaded;
 
-        private PlayerProgressData _cachedProgress;
+        private PlayerSaveData _cachedSave;
         private readonly byte[] _xorMask = Encoding.UTF8.GetBytes("RILEY_LOVES_NIBBLE");
 
         private string SavePath => Path.Combine(Application.persistentDataPath, SaveFileName);
@@ -33,8 +33,18 @@ namespace AngryDogs.SaveSystem
         {
             get
             {
-                _cachedProgress ??= PlayerProgressData.CreateDefault();
-                return _cachedProgress;
+                return Save.Progress;
+            }
+        }
+
+        public PlayerSettingsData Settings => Save.Settings;
+
+        private PlayerSaveData Save
+        {
+            get
+            {
+                _cachedSave ??= PlayerSaveData.CreateDefault();
+                return _cachedSave;
             }
         }
 
@@ -51,8 +61,8 @@ namespace AngryDogs.SaveSystem
         /// </summary>
         public void Load()
         {
-            _cachedProgress = ReadFromDisk();
-            SaveLoaded?.Invoke(Progress);
+            _cachedSave = ReadFromDisk();
+            SaveLoaded?.Invoke(Save);
         }
 
         /// <summary>
@@ -60,14 +70,14 @@ namespace AngryDogs.SaveSystem
         /// </summary>
         public void Save()
         {
-            if (_cachedProgress == null)
+            if (_cachedSave == null)
             {
-                Debug.LogWarning("Save() called without progress data. Creating defaults.");
-                _cachedProgress = PlayerProgressData.CreateDefault();
+                Debug.LogWarning("Save() called without cached data. Creating defaults.");
+                _cachedSave = PlayerSaveData.CreateDefault();
             }
 
-            _cachedProgress.Version++;
-            WriteToDisk(_cachedProgress);
+            Save.Progress.Version++;
+            WriteToDisk(Save);
         }
 
         /// <summary>
@@ -105,6 +115,19 @@ namespace AngryDogs.SaveSystem
         }
 
         /// <summary>
+        /// Persist non-binding settings like audio sliders or UI layout tweaks.
+        /// </summary>
+        public void StoreSettings(float musicVolume, float sfxVolume, bool hapticsEnabled, bool leftHandedUi)
+        {
+            var settings = Settings;
+            settings.MusicVolume = musicVolume;
+            settings.SfxVolume = sfxVolume;
+            settings.HapticsEnabled = hapticsEnabled;
+            settings.LeftHandedUi = leftHandedUi;
+            Save();
+        }
+
+        /// <summary>
         /// Simple binding persistence using PlayerPrefs for cross-platform compatibility.
         /// </summary>
         public void StoreKeyBinding(string actionId, KeyCode key)
@@ -114,7 +137,10 @@ namespace AngryDogs.SaveSystem
                 return;
             }
 
+            Settings.SetBinding(actionId, key);
             PlayerPrefs.SetInt(KeyBindingPrefix + actionId, (int)key);
+            PlayerPrefs.Save();
+            Save();
         }
 
         public KeyCode LoadKeyBinding(string actionId, KeyCode fallback)
@@ -124,12 +150,17 @@ namespace AngryDogs.SaveSystem
                 return fallback;
             }
 
-            return (KeyCode)PlayerPrefs.GetInt(KeyBindingPrefix + actionId, (int)fallback);
+            if (PlayerPrefs.HasKey(KeyBindingPrefix + actionId))
+            {
+                return (KeyCode)PlayerPrefs.GetInt(KeyBindingPrefix + actionId, (int)fallback);
+            }
+
+            return Settings.GetBinding(actionId, fallback);
         }
 
         public void DeleteSave()
         {
-            _cachedProgress = PlayerProgressData.CreateDefault();
+            _cachedSave = PlayerSaveData.CreateDefault();
 #if UNITY_WEBGL && !UNITY_EDITOR
             PlayerPrefs.DeleteKey(SaveFileName);
             PlayerPrefs.Save();
@@ -139,16 +170,24 @@ namespace AngryDogs.SaveSystem
                 File.Delete(SavePath);
             }
 #endif
-            SaveLoaded?.Invoke(_cachedProgress);
+            foreach (var binding in Settings.Bindings)
+            {
+                if (!string.IsNullOrEmpty(binding.actionId))
+                {
+                    PlayerPrefs.DeleteKey(KeyBindingPrefix + binding.actionId);
+                }
+            }
+            PlayerPrefs.Save();
+            SaveLoaded?.Invoke(Save);
         }
 
-        private PlayerProgressData ReadFromDisk()
+        private PlayerSaveData ReadFromDisk()
         {
 #if UNITY_WEBGL && !UNITY_EDITOR
             var payload = PlayerPrefs.GetString(SaveFileName, string.Empty);
             if (string.IsNullOrEmpty(payload))
             {
-                return PlayerProgressData.CreateDefault();
+                return PlayerSaveData.CreateDefault();
             }
 
             return Deserialize(payload);
@@ -157,7 +196,7 @@ namespace AngryDogs.SaveSystem
             {
                 if (!File.Exists(SavePath))
                 {
-                    return PlayerProgressData.CreateDefault();
+                    return PlayerSaveData.CreateDefault();
                 }
 
                 using var stream = new FileStream(SavePath, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -168,12 +207,12 @@ namespace AngryDogs.SaveSystem
             catch (Exception ex)
             {
                 Debug.LogError($"Failed to load save file at {SavePath}: {ex.Message}");
-                return PlayerProgressData.CreateDefault();
+                return PlayerSaveData.CreateDefault();
             }
 #endif
         }
 
-        private void WriteToDisk(PlayerProgressData data)
+        private void WriteToDisk(PlayerSaveData data)
         {
             var payload = Serialize(data);
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -199,7 +238,7 @@ namespace AngryDogs.SaveSystem
 #endif
         }
 
-        private string Serialize(PlayerProgressData data)
+        private string Serialize(PlayerSaveData data)
         {
             if (!obfuscatePayload)
             {
@@ -216,13 +255,13 @@ namespace AngryDogs.SaveSystem
             return Convert.ToBase64String(bytes);
         }
 
-        private PlayerProgressData Deserialize(string payload)
+        private PlayerSaveData Deserialize(string payload)
         {
             try
             {
                 if (string.IsNullOrEmpty(payload))
                 {
-                    return PlayerProgressData.CreateDefault();
+                    return PlayerSaveData.CreateDefault();
                 }
 
                 if (obfuscatePayload)
@@ -236,13 +275,13 @@ namespace AngryDogs.SaveSystem
                     payload = Encoding.UTF8.GetString(bytes);
                 }
 
-                var data = JsonUtility.FromJson<PlayerProgressData>(payload);
-                return data ?? PlayerProgressData.CreateDefault();
+                var data = JsonUtility.FromJson<PlayerSaveData>(payload);
+                return data ?? PlayerSaveData.CreateDefault();
             }
             catch (Exception ex)
             {
                 Debug.LogWarning($"Failed to parse save payload, using defaults. {ex.Message}");
-                return PlayerProgressData.CreateDefault();
+                return PlayerSaveData.CreateDefault();
             }
         }
 
