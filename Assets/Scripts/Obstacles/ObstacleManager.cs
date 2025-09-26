@@ -26,6 +26,23 @@ namespace AngryDogs.Obstacles
             public AudioClip spawnClip;
             [Tooltip("Distance from Riley after which this obstacle despawns.")]
             public float despawnDistance = 20f;
+            
+            // New obstacle-specific properties
+            [Tooltip("Special behavior type for unique obstacles.")]
+            public ObstacleType obstacleType = ObstacleType.Standard;
+            [Tooltip("Duration for temporary effects (e.g., sticky pellets, decoy trails).")]
+            public float effectDuration = 5f;
+            [Tooltip("Effect radius for area-of-effect obstacles.")]
+            public float effectRadius = 3f;
+        }
+
+        public enum ObstacleType
+        {
+            Standard,
+            KibbleVendingBot,    // Spawns sticky pellets that make hounds slip
+            HoloPawPrint,        // Creates decoy trails to misguide hounds
+            SlimeSlide,          // Existing repurposing target
+            CyberChihuahua       // Boss obstacle
         }
 
         private struct ActiveObstacle
@@ -254,6 +271,209 @@ namespace AngryDogs.Obstacles
             }
 
             sfxSource.PlayOneShot(clip);
+        }
+
+        /// <summary>
+        /// Handles special obstacle behaviors when they're destroyed or activated.
+        /// Riley: "Time to turn these obstacles into something useful for once!"
+        /// </summary>
+        public void HandleObstacleInteraction(GameObject obstacle, Vector3 hitPoint, Vector3 hitNormal)
+        {
+            if (!_lookup.TryGetValue(obstacle, out var index))
+            {
+                return;
+            }
+
+            var entry = _activeObstacles[index];
+            var definition = entry.Definition;
+
+            switch (definition.obstacleType)
+            {
+                case ObstacleType.KibbleVendingBot:
+                    ActivateKibbleVendingBot(obstacle, hitPoint, definition);
+                    break;
+                case ObstacleType.HoloPawPrint:
+                    ActivateHoloPawPrint(obstacle, hitPoint, definition);
+                    break;
+                case ObstacleType.Standard:
+                default:
+                    // Standard repurposing behavior
+                    NotifyObstacleDestroyed(obstacle, hitPoint, hitNormal);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Activates Kibble Vending Bot - spawns sticky pellets that make hounds slip comically.
+        /// Nibble: "Bark! (Translation: Sticky treats for the bad hounds!)"
+        /// </summary>
+        private void ActivateKibbleVendingBot(GameObject obstacle, Vector3 hitPoint, ObstacleDefinition definition)
+        {
+            Debug.Log("Riley: Kibble vending bot activated! Time to make these hounds slip and slide!");
+
+            // Spawn sticky pellets in a radius
+            var pelletCount = 8;
+            var angleStep = 360f / pelletCount;
+
+            for (int i = 0; i < pelletCount; i++)
+            {
+                var angle = i * angleStep * Mathf.Deg2Rad;
+                var direction = new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle));
+                var pelletPosition = hitPoint + direction * definition.effectRadius * 0.5f;
+
+                // Create sticky pellet effect
+                StartCoroutine(CreateStickyPelletEffect(pelletPosition, definition.effectDuration));
+            }
+
+            // Play humorous sound effect
+            PlayClip(definition.repurposedClip);
+            
+            // Remove the original obstacle
+            if (_lookup.TryGetValue(obstacle, out var index))
+            {
+                pooler.Return(obstacle);
+                RemoveAt(index);
+            }
+
+            // Trigger event for UI feedback
+            ObstacleRepurposed?.Invoke(definition, obstacle);
+        }
+
+        /// <summary>
+        /// Activates Holo-Paw Print - creates decoy trails to misguide hounds away from Nibble.
+        /// Riley: "Holographic paw prints? Now that's some next-level misdirection!"
+        /// </summary>
+        private void ActivateHoloPawPrint(GameObject obstacle, Vector3 hitPoint, ObstacleDefinition definition)
+        {
+            Debug.Log("Nibble: *confused bark* (Translation: Why are there more of me?)");
+
+            // Create a trail of holographic paw prints leading away from Nibble
+            var trailLength = 5;
+            var trailDirection = (hitPoint - player.position).normalized;
+            var pawPrintSpacing = 2f;
+
+            for (int i = 1; i <= trailLength; i++)
+            {
+                var pawPrintPosition = hitPoint + trailDirection * (i * pawPrintSpacing);
+                StartCoroutine(CreateHoloPawPrintEffect(pawPrintPosition, definition.effectDuration, i));
+            }
+
+            // Play holographic sound effect
+            PlayClip(definition.repurposedClip);
+
+            // Remove the original obstacle
+            if (_lookup.TryGetValue(obstacle, out var index))
+            {
+                pooler.Return(obstacle);
+                RemoveAt(index);
+            }
+
+            // Trigger event for UI feedback
+            ObstacleRepurposed?.Invoke(definition, obstacle);
+        }
+
+        /// <summary>
+        /// Creates a sticky pellet effect that makes hounds slip.
+        /// Riley: "These pellets are like digital banana peels for cybernetic hounds!"
+        /// </summary>
+        private IEnumerator CreateStickyPelletEffect(Vector3 position, float duration)
+        {
+            // Create a simple sticky pellet visual effect
+            var pellet = new GameObject("StickyPellet");
+            pellet.transform.position = position;
+            
+            // Add a simple visual indicator (in a real game, this would be a particle effect)
+            var renderer = pellet.AddComponent<MeshRenderer>();
+            var collider = pellet.AddComponent<SphereCollider>();
+            collider.radius = 0.5f;
+            collider.isTrigger = true;
+
+            // Add a component to handle hound slipping
+            var stickyPellet = pellet.AddComponent<StickyPelletComponent>();
+            stickyPellet.Initialize(duration);
+
+            yield return new WaitForSeconds(duration);
+
+            // Clean up
+            if (pellet != null)
+            {
+                Destroy(pellet);
+            }
+        }
+
+        /// <summary>
+        /// Creates a holographic paw print effect to misguide hounds.
+        /// Nibble: "Bark! (Translation: Look, it's me but not me!)"
+        /// </summary>
+        private IEnumerator CreateHoloPawPrintEffect(Vector3 position, float duration, int index)
+        {
+            // Create a holographic paw print visual effect
+            var pawPrint = new GameObject($"HoloPawPrint_{index}");
+            pawPrint.transform.position = position;
+            
+            // Add a simple visual indicator (in a real game, this would be a holographic effect)
+            var renderer = pawPrint.AddComponent<MeshRenderer>();
+            var collider = pawPrint.AddComponent<BoxCollider>();
+            collider.isTrigger = true;
+
+            // Add a component to handle hound misdirection
+            var holoPawPrint = pawPrint.AddComponent<HoloPawPrintComponent>();
+            holoPawPrint.Initialize(duration, index);
+
+            // Fade out over time
+            var startTime = Time.time;
+            while (Time.time - startTime < duration)
+            {
+                var alpha = 1f - ((Time.time - startTime) / duration);
+                // In a real game, you'd fade the material alpha here
+                yield return null;
+            }
+
+            // Clean up
+            if (pawPrint != null)
+            {
+                Destroy(pawPrint);
+            }
+        }
+
+        /// <summary>
+        /// Gets all active obstacles of a specific type for gameplay mechanics.
+        /// Riley: "Need to know what obstacles are causing trouble out there!"
+        /// </summary>
+        public List<GameObject> GetActiveObstaclesOfType(ObstacleType type)
+        {
+            var result = new List<GameObject>();
+            
+            foreach (var entry in _activeObstacles)
+            {
+                if (entry.Definition.obstacleType == type && entry.Instance != null)
+                {
+                    result.Add(entry.Instance);
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Checks if any obstacles are affecting a specific position (for hound AI).
+        /// Nibble: "Bark! (Translation: Are there any sticky spots around here?)"
+        /// </summary>
+        public bool IsPositionAffectedByObstacle(Vector3 position, ObstacleType type, float radius = 1f)
+        {
+            foreach (var entry in _activeObstacles)
+            {
+                if (entry.Definition.obstacleType == type && entry.Instance != null)
+                {
+                    var distance = Vector3.Distance(position, entry.Instance.transform.position);
+                    if (distance <= radius)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
     }
 }
