@@ -128,6 +128,9 @@ namespace AngryDogs.UI
             GameEvents.GameResumed += HandleGameResumed;
             GameEvents.GameOver += HandleGameOver;
 
+            // Initialize player feedback system
+            InitializePlayerFeedback();
+
             ShowScreen(mainMenu);
         }
 
@@ -851,6 +854,424 @@ namespace AngryDogs.UI
             Phone,
             Tablet,
             Desktop
+        }
+
+        // Player Feedback System
+        [Header("Player Feedback System")]
+        [SerializeField] private bool enablePlayerFeedback = true;
+        [SerializeField] private int feedbackSessionThreshold = 5; // Show feedback after 5 sessions
+        [SerializeField] private float feedbackDistanceThreshold = 10000f; // Show feedback after 10km total distance
+        [SerializeField] private float feedbackCooldown = 86400f; // 24 hours between feedback prompts
+        [SerializeField] private GameObject feedbackPromptPrefab;
+        [SerializeField] private GameObject rateGamePromptPrefab;
+        [SerializeField] private GameObject bugReportPromptPrefab;
+
+        private int _sessionCount = 0;
+        private float _totalDistance = 0f;
+        private float _lastFeedbackTime = 0f;
+        private bool _hasShownFeedback = false;
+
+        /// <summary>
+        /// Initializes the player feedback system.
+        /// Riley: "Initialize the player feedback system!"
+        /// </summary>
+        private void InitializePlayerFeedback()
+        {
+            if (!enablePlayerFeedback) return;
+
+            // Load feedback data from save
+            LoadFeedbackData();
+            
+            // Check if feedback should be shown
+            CheckFeedbackEligibility();
+            
+            Debug.Log("Riley: Player feedback system initialized!");
+            Debug.Log($"Nibble: *bark* (Translation: Sessions: {_sessionCount}, Distance: {_totalDistance:F0}m)");
+        }
+
+        /// <summary>
+        /// Loads feedback data from save system.
+        /// Nibble: "Bark! (Translation: Load feedback data!)"
+        /// </summary>
+        private void LoadFeedbackData()
+        {
+            if (saveManager != null)
+            {
+                var progress = saveManager.Progress;
+                // You would need to add these properties to PlayerProgressData
+                // _sessionCount = progress.SessionCount;
+                // _totalDistance = progress.TotalDistance;
+                // _lastFeedbackTime = progress.LastFeedbackTime;
+                
+                // For now, use default values
+                _sessionCount = 0;
+                _totalDistance = 0f;
+                _lastFeedbackTime = 0f;
+            }
+        }
+
+        /// <summary>
+        /// Saves feedback data to save system.
+        /// Riley: "Save feedback data!"
+        /// </summary>
+        private void SaveFeedbackData()
+        {
+            if (saveManager != null)
+            {
+                var progress = saveManager.Progress;
+                // You would need to add these properties to PlayerProgressData
+                // progress.SessionCount = _sessionCount;
+                // progress.TotalDistance = _totalDistance;
+                // progress.LastFeedbackTime = _lastFeedbackTime;
+                
+                saveManager.Save();
+            }
+        }
+
+        /// <summary>
+        /// Checks if player is eligible for feedback prompts.
+        /// Nibble: "Bark! (Translation: Check feedback eligibility!)"
+        /// </summary>
+        private void CheckFeedbackEligibility()
+        {
+            if (_hasShownFeedback) return;
+
+            var timeSinceLastFeedback = Time.time - _lastFeedbackTime;
+            var isEligibleForFeedback = (_sessionCount >= feedbackSessionThreshold || _totalDistance >= feedbackDistanceThreshold) 
+                                      && timeSinceLastFeedback >= feedbackCooldown;
+
+            if (isEligibleForFeedback)
+            {
+                ShowFeedbackPrompt();
+            }
+        }
+
+        /// <summary>
+        /// Shows the feedback prompt to the player.
+        /// Riley: "Show feedback prompt to player!"
+        /// </summary>
+        private void ShowFeedbackPrompt()
+        {
+            if (feedbackPromptPrefab == null)
+            {
+                Debug.LogWarning("Riley: Feedback prompt prefab not assigned!");
+                return;
+            }
+
+            // Create feedback prompt
+            var feedbackPrompt = Instantiate(feedbackPromptPrefab, transform);
+            var feedbackUI = feedbackPrompt.GetComponent<FeedbackPromptUI>();
+            
+            if (feedbackUI != null)
+            {
+                feedbackUI.Initialize(this, OnFeedbackPromptResponse);
+            }
+
+            _hasShownFeedback = true;
+            _lastFeedbackTime = Time.time;
+            SaveFeedbackData();
+
+            Debug.Log("Riley: Feedback prompt shown to player!");
+            Debug.Log("Nibble: *bark* (Translation: Time to get some feedback!)");
+        }
+
+        /// <summary>
+        /// Handles feedback prompt response.
+        /// Nibble: "Bark! (Translation: Handle feedback response!)"
+        /// </summary>
+        private void OnFeedbackPromptResponse(FeedbackType feedbackType)
+        {
+            switch (feedbackType)
+            {
+                case FeedbackType.RateGame:
+                    ShowRateGamePrompt();
+                    break;
+                case FeedbackType.ReportBug:
+                    ShowBugReportPrompt();
+                    break;
+                case FeedbackType.Dismiss:
+                    DismissFeedbackPrompt();
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Shows the rate game prompt.
+        /// Riley: "Show rate game prompt!"
+        /// </summary>
+        private void ShowRateGamePrompt()
+        {
+            if (rateGamePromptPrefab == null)
+            {
+                Debug.LogWarning("Riley: Rate game prompt prefab not assigned!");
+                return;
+            }
+
+            var ratePrompt = Instantiate(rateGamePromptPrefab, transform);
+            var rateUI = ratePrompt.GetComponent<RateGameUI>();
+            
+            if (rateUI != null)
+            {
+                rateUI.Initialize(this, OnRateGameResponse);
+            }
+
+            Debug.Log("Riley: Rate game prompt shown!");
+        }
+
+        /// <summary>
+        /// Shows the bug report prompt.
+        /// Nibble: "Bark! (Translation: Show bug report prompt!)"
+        /// </summary>
+        private void ShowBugReportPrompt()
+        {
+            if (bugReportPromptPrefab == null)
+            {
+                Debug.LogWarning("Riley: Bug report prompt prefab not assigned!");
+                return;
+            }
+
+            var bugPrompt = Instantiate(bugReportPromptPrefab, transform);
+            var bugUI = bugPrompt.GetComponent<BugReportUI>();
+            
+            if (bugUI != null)
+            {
+                bugUI.Initialize(this, OnBugReportResponse);
+            }
+
+            Debug.Log("Riley: Bug report prompt shown!");
+        }
+
+        /// <summary>
+        /// Handles rate game response.
+        /// Riley: "Handle rate game response!"
+        /// </summary>
+        private void OnRateGameResponse(RateGameResponse response)
+        {
+            switch (response)
+            {
+                case RateGameResponse.RateNow:
+                    OpenAppStoreRating();
+                    break;
+                case RateGameResponse.RemindLater:
+                    ScheduleFeedbackReminder(86400f); // 24 hours
+                    break;
+                case RateGameResponse.Never:
+                    DisableFeedbackPrompts();
+                    break;
+            }
+
+            Debug.Log($"Nibble: *bark* (Translation: Rate game response: {response})");
+        }
+
+        /// <summary>
+        /// Handles bug report response.
+        /// Nibble: "Bark! (Translation: Handle bug report response!)"
+        /// </summary>
+        private void OnBugReportResponse(BugReportResponse response, string description = "")
+        {
+            switch (response)
+            {
+                case BugReportResponse.Submit:
+                    SubmitBugReport(description);
+                    break;
+                case BugReportResponse.Cancel:
+                    // Do nothing
+                    break;
+            }
+
+            Debug.Log($"Riley: Bug report response: {response}");
+            if (!string.IsNullOrEmpty(description))
+            {
+                Debug.Log($"Nibble: *bark* (Translation: Bug description: {description})");
+            }
+        }
+
+        /// <summary>
+        /// Opens the app store rating page.
+        /// Riley: "Open app store rating page!"
+        /// </summary>
+        private void OpenAppStoreRating()
+        {
+            var appStoreUrl = GetAppStoreUrl();
+            Application.OpenURL(appStoreUrl);
+            
+            // Track analytics
+            TrackFeedbackEvent("rate_game_opened");
+            
+            Debug.Log("Riley: App store rating page opened!");
+        }
+
+        /// <summary>
+        /// Submits a bug report.
+        /// Nibble: "Bark! (Translation: Submit bug report!)"
+        /// </summary>
+        private void SubmitBugReport(string description)
+        {
+            // In a real implementation, you would send this to your bug reporting service
+            var bugReport = new
+            {
+                description = description,
+                platform = Application.platform.ToString(),
+                version = Application.version,
+                timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                deviceInfo = GetDeviceInfo()
+            };
+
+            // Track analytics
+            TrackFeedbackEvent("bug_report_submitted", new Dictionary<string, object>
+            {
+                { "description_length", description.Length },
+                { "platform", Application.platform.ToString() }
+            });
+
+            Debug.Log("Riley: Bug report submitted!");
+            Debug.Log($"Nibble: *bark* (Translation: Bug report: {description})");
+        }
+
+        /// <summary>
+        /// Schedules a feedback reminder.
+        /// Riley: "Schedule feedback reminder!"
+        /// </summary>
+        private void ScheduleFeedbackReminder(float delay)
+        {
+            _lastFeedbackTime = Time.time - feedbackCooldown + delay;
+            SaveFeedbackData();
+            
+            Debug.Log($"Nibble: *bark* (Translation: Feedback reminder scheduled for {delay} seconds!)");
+        }
+
+        /// <summary>
+        /// Disables feedback prompts permanently.
+        /// Riley: "Disable feedback prompts permanently!"
+        /// </summary>
+        private void DisableFeedbackPrompts()
+        {
+            enablePlayerFeedback = false;
+            SaveFeedbackData();
+            
+            Debug.Log("Riley: Feedback prompts disabled permanently!");
+        }
+
+        /// <summary>
+        /// Dismisses the feedback prompt.
+        /// Nibble: "Bark! (Translation: Dismiss feedback prompt!)"
+        /// </summary>
+        private void DismissFeedbackPrompt()
+        {
+            _hasShownFeedback = false;
+            SaveFeedbackData();
+            
+            Debug.Log("Riley: Feedback prompt dismissed!");
+        }
+
+        /// <summary>
+        /// Updates session count and distance.
+        /// Riley: "Update session count and distance!"
+        /// </summary>
+        public void UpdatePlayerProgress(int sessionCount, float distance)
+        {
+            _sessionCount = sessionCount;
+            _totalDistance = distance;
+            
+            // Check if feedback should be shown
+            CheckFeedbackEligibility();
+            
+            SaveFeedbackData();
+        }
+
+        /// <summary>
+        /// Gets the app store URL for the current platform.
+        /// Nibble: "Bark! (Translation: Get app store URL!)"
+        /// </summary>
+        private string GetAppStoreUrl()
+        {
+            switch (Application.platform)
+            {
+                case RuntimePlatform.IPhonePlayer:
+                    return "https://apps.apple.com/app/angry-dogs/id123456789";
+                case RuntimePlatform.Android:
+                    return "https://play.google.com/store/apps/details?id=com.angrydogs.game";
+                default:
+                    return "https://angrydogs.game";
+            }
+        }
+
+        /// <summary>
+        /// Gets device information for bug reports.
+        /// Riley: "Get device information!"
+        /// </summary>
+        private string GetDeviceInfo()
+        {
+            return $"Platform: {Application.platform}, " +
+                   $"Version: {Application.version}, " +
+                   $"Unity: {Application.unityVersion}, " +
+                   $"Resolution: {Screen.width}x{Screen.height}, " +
+                   $"Memory: {SystemInfo.systemMemorySize}MB";
+        }
+
+        /// <summary>
+        /// Tracks feedback events for analytics.
+        /// Nibble: "Bark! (Translation: Track feedback events!)"
+        /// </summary>
+        private void TrackFeedbackEvent(string eventName, Dictionary<string, object> parameters = null)
+        {
+            // In a real implementation, you would send this to your analytics service
+            Debug.Log($"Analytics: {eventName}");
+            if (parameters != null)
+            {
+                foreach (var param in parameters)
+                {
+                    Debug.Log($"  {param.Key}: {param.Value}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets feedback system statistics.
+        /// Riley: "Get feedback system statistics!"
+        /// </summary>
+        public string GetFeedbackStats()
+        {
+            var stats = $"Player Feedback Statistics:\n";
+            stats += $"Enabled: {enablePlayerFeedback}\n";
+            stats += $"Session Count: {_sessionCount}\n";
+            stats += $"Total Distance: {_totalDistance:F0}m\n";
+            stats += $"Last Feedback Time: {_lastFeedbackTime:F0}\n";
+            stats += $"Has Shown Feedback: {_hasShownFeedback}\n";
+            stats += $"Session Threshold: {feedbackSessionThreshold}\n";
+            stats += $"Distance Threshold: {feedbackDistanceThreshold:F0}m\n";
+            stats += $"Cooldown: {feedbackCooldown:F0}s\n";
+            
+            return stats;
+        }
+
+        /// <summary>
+        /// Feedback types for the feedback system.
+        /// </summary>
+        public enum FeedbackType
+        {
+            RateGame,
+            ReportBug,
+            Dismiss
+        }
+
+        /// <summary>
+        /// Rate game response types.
+        /// </summary>
+        public enum RateGameResponse
+        {
+            RateNow,
+            RemindLater,
+            Never
+        }
+
+        /// <summary>
+        /// Bug report response types.
+        /// </summary>
+        public enum BugReportResponse
+        {
+            Submit,
+            Cancel
         }
     }
 }
