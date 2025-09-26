@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Angry Dogs - Cyberpunk Endless Runner</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #0a0a0a, #1a0a2e, #16213e);
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            color: #00ffff;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        #gameCanvas {
+            border: 2px solid #00ffff;
+            background: linear-gradient(180deg, #000428 0%, #004e92 100%);
+            box-shadow: 0 0 20px #00ffff;
+        }
+        
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            color: #00ffff;
+            text-shadow: 0 0 10px #00ffff;
+        }
+        
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            color: #ffff00;
+            text-shadow: 0 0 10px #ffff00;
+        }
+        
+        .glitch {
+            animation: glitch 0.3s infinite;
+        }
+        
+        @keyframes glitch {
+            0% { transform: translate(0); }
+            20% { transform: translate(-2px, 2px); }
+            40% { transform: translate(-2px, -2px); }
+            60% { transform: translate(2px, 2px); }
+            80% { transform: translate(2px, -2px); }
+            100% { transform: translate(0); }
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="ui">
+            <div>SCORE: <span id="score">0</span></div>
+            <div>DISTANCE: <span id="distance">0</span>m</div>
+            <div>NIBBLE HEALTH: <span id="nibbleHealth">100</span>%</div>
+            <div>AMMO: <span id="ammo">10</span></div>
+        </div>
+        <div id="instructions">
+            <div>ARROW KEYS: Move | SPACE: Shoot | R: Restart</div>
+            <div>Protect Nibble from the Angry Dogs!</div>
+        </div>
+    </div>
+    
+    <script src="game.js"></script>
+</body>
+</html>
