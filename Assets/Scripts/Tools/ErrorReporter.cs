@@ -324,8 +324,8 @@ namespace AngryDogs.Tools
         }
 
         /// <summary>
-        /// Gets current context for error reports.
-        /// Nibble: "Bark! (Translation: Get current context!)"
+        /// Gets current context for error reports with enhanced UI interaction tracking.
+        /// Nibble: "Bark! (Translation: Get current context with UI tracking!)"
         /// </summary>
         private Dictionary<string, object> GetCurrentContext()
         {
@@ -337,7 +337,11 @@ namespace AngryDogs.Tools
                 {"fps", 1f / Time.unscaledDeltaTime},
                 {"memory_usage", UnityEngine.Profiling.Profiler.GetTotalAllocatedMemory(false) / 1024f / 1024f},
                 {"screen_resolution", $"{Screen.width}x{Screen.height}"},
-                {"fullscreen", Screen.fullScreen}
+                {"fullscreen", Screen.fullScreen},
+                {"battery_level", SystemInfo.batteryLevel},
+                {"battery_status", SystemInfo.batteryStatus.ToString()},
+                {"device_model", SystemInfo.deviceModel},
+                {"operating_system", SystemInfo.operatingSystem}
             };
 
             // Add game-specific context
@@ -352,6 +356,24 @@ namespace AngryDogs.Tools
                     context.Add("deaths", session.deaths);
                     context.Add("play_time", session.totalPlayTime);
                 }
+            }
+
+            // Add UI-specific context
+            var uiManager = FindObjectOfType<UIManager>();
+            if (uiManager != null)
+            {
+                var performanceSettings = uiManager.GetPerformanceSettings();
+                context.Add("neon_effects_enabled", performanceSettings.neonEffects);
+                context.Add("mobile_optimized", performanceSettings.mobileOptimized);
+                context.Add("ui_update_interval", performanceSettings.updateInterval);
+            }
+
+            // Add localization context
+            var localizationManager = FindObjectOfType<LocalizationManager>();
+            if (localizationManager != null)
+            {
+                context.Add("current_language", localizationManager.GetCurrentLanguage());
+                context.Add("localization_initialized", true);
             }
 
             return context;
@@ -503,6 +525,202 @@ namespace AngryDogs.Tools
         {
             enableErrorReporting = false;
             Debug.Log("Riley: Error reporting disabled!");
+        }
+
+        /// <summary>
+        /// Reports UI interaction bugs specifically.
+        /// Riley: "Report UI interaction bugs!"
+        /// </summary>
+        public void ReportUIBug(string uiElement, string action, string errorMessage, Dictionary<string, object> additionalContext = null)
+        {
+            var errorReport = new ErrorReport
+            {
+                errorId = Guid.NewGuid().ToString(),
+                errorType = "UI_Bug",
+                errorMessage = $"UI Bug - {uiElement}: {action} - {errorMessage}",
+                stackTrace = System.Environment.StackTrace,
+                timestamp = DateTime.Now,
+                sessionId = _sessionId,
+                deviceInfo = GetDeviceInfo(),
+                platform = Application.platform.ToString(),
+                version = _version,
+                context = GetCurrentContext()
+            };
+
+            // Add UI-specific context
+            if (additionalContext != null)
+            {
+                foreach (var kvp in additionalContext)
+                {
+                    errorReport.context.Add(kvp.Key, kvp.Value);
+                }
+            }
+
+            errorReport.context.Add("ui_element", uiElement);
+            errorReport.context.Add("ui_action", action);
+            errorReport.context.Add("bug_type", "ui_interaction");
+
+            ReportError(errorReport);
+        }
+
+        /// <summary>
+        /// Reports quip toggle failures specifically.
+        /// Nibble: "Bark! (Translation: Report quip toggle failures!)"
+        /// </summary>
+        public void ReportQuipToggleFailure(string quipType, string errorMessage)
+        {
+            ReportUIBug("quip_toggle", "toggle", errorMessage, new Dictionary<string, object>
+            {
+                {"quip_type", quipType},
+                {"expected_behavior", "Toggle quip display on/off"},
+                {"actual_behavior", "Toggle failed or didn't work as expected"}
+            });
+        }
+
+        /// <summary>
+        /// Reports localization failures.
+        /// Riley: "Report localization failures!"
+        /// </summary>
+        public void ReportLocalizationFailure(string languageCode, string uiElement, string errorMessage)
+        {
+            ReportUIBug("localization", "change_language", errorMessage, new Dictionary<string, object>
+            {
+                {"target_language", languageCode},
+                {"ui_element", uiElement},
+                {"expected_behavior", "Change language and update UI text"},
+                {"actual_behavior", "Language change failed or UI didn't update"}
+            });
+        }
+
+        /// <summary>
+        /// Reports settings save failures.
+        /// Nibble: "Bark! (Translation: Report settings save failures!)"
+        /// </summary>
+        public void ReportSettingsSaveFailure(string settingType, string errorMessage)
+        {
+            ReportUIBug("settings", "save", errorMessage, new Dictionary<string, object>
+            {
+                {"setting_type", settingType},
+                {"expected_behavior", "Save setting and persist to storage"},
+                {"actual_behavior", "Setting save failed or didn't persist"}
+            });
+        }
+
+        /// <summary>
+        /// Reports performance issues on mobile.
+        /// Riley: "Report performance issues on mobile!"
+        /// </summary>
+        public void ReportPerformanceIssue(string issueType, float currentFPS, float targetFPS, Dictionary<string, object> additionalData = null)
+        {
+            var errorReport = new ErrorReport
+            {
+                errorId = Guid.NewGuid().ToString(),
+                errorType = "Performance_Issue",
+                errorMessage = $"Performance Issue - {issueType}: FPS {currentFPS}/{targetFPS}",
+                stackTrace = System.Environment.StackTrace,
+                timestamp = DateTime.Now,
+                sessionId = _sessionId,
+                deviceInfo = GetDeviceInfo(),
+                platform = Application.platform.ToString(),
+                version = _version,
+                context = GetCurrentContext()
+            };
+
+            errorReport.context.Add("issue_type", issueType);
+            errorReport.context.Add("current_fps", currentFPS);
+            errorReport.context.Add("target_fps", targetFPS);
+            errorReport.context.Add("performance_issue", true);
+
+            if (additionalData != null)
+            {
+                foreach (var kvp in additionalData)
+                {
+                    errorReport.context.Add(kvp.Key, kvp.Value);
+                }
+            }
+
+            ReportError(errorReport);
+        }
+
+        /// <summary>
+        /// Exports anonymized error data for post-launch analysis.
+        /// Riley: "Export anonymized error data!"
+        /// </summary>
+        public string ExportAnonymizedErrorData()
+        {
+            var anonymizedData = new Dictionary<string, object>
+            {
+                {"total_errors", _errorQueue.Count},
+                {"total_crashes", _crashQueue.Count},
+                {"session_id", _sessionId},
+                {"platform", Application.platform.ToString()},
+                {"version", _version},
+                {"device_type", GetDeviceType()},
+                {"export_timestamp", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")}
+            };
+
+            // Anonymize error data
+            var errorTypes = new Dictionary<string, int>();
+            var uiBugTypes = new Dictionary<string, int>();
+            var performanceIssues = new Dictionary<string, int>();
+
+            foreach (var error in _errorQueue)
+            {
+                if (!errorTypes.ContainsKey(error.errorType))
+                    errorTypes[error.errorType] = 0;
+                errorTypes[error.errorType]++;
+
+                if (error.errorType == "UI_Bug")
+                {
+                    if (error.context.ContainsKey("ui_element"))
+                    {
+                        var uiElement = error.context["ui_element"].ToString();
+                        if (!uiBugTypes.ContainsKey(uiElement))
+                            uiBugTypes[uiElement] = 0;
+                        uiBugTypes[uiElement]++;
+                    }
+                }
+
+                if (error.errorType == "Performance_Issue")
+                {
+                    if (error.context.ContainsKey("issue_type"))
+                    {
+                        var issueType = error.context["issue_type"].ToString();
+                        if (!performanceIssues.ContainsKey(issueType))
+                            performanceIssues[issueType] = 0;
+                        performanceIssues[issueType]++;
+                    }
+                }
+            }
+
+            anonymizedData.Add("error_types", errorTypes);
+            anonymizedData.Add("ui_bug_types", uiBugTypes);
+            anonymizedData.Add("performance_issues", performanceIssues);
+
+            return JsonUtility.ToJson(anonymizedData, true);
+        }
+
+        /// <summary>
+        /// Gets device type for analytics.
+        /// Riley: "Get device type for analytics!"
+        /// </summary>
+        private string GetDeviceType()
+        {
+            if (Application.isMobilePlatform)
+            {
+                var width = Screen.width;
+                var height = Screen.height;
+                var aspectRatio = (float)width / height;
+
+                if (width < 768 || aspectRatio < 1.2f)
+                    return "Phone";
+                else
+                    return "Tablet";
+            }
+            else
+            {
+                return "Desktop";
+            }
         }
 
         private void OnDestroy()

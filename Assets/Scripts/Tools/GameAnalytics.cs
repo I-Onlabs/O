@@ -378,15 +378,17 @@ namespace AngryDogs.Tools
         }
 
         /// <summary>
-        /// Tracks UI interaction.
-        /// Nibble: "Bark! (Translation: Track UI interaction!)"
+        /// Tracks UI interaction with enhanced bug logging.
+        /// Nibble: "Bark! (Translation: Track UI interaction with bug logging!)"
         /// </summary>
         public void TrackUIInteraction(string uiElement, string action, Dictionary<string, object> additionalData = null)
         {
             var parameters = new Dictionary<string, object>
             {
                 {"ui_element", uiElement},
-                {"action", action}
+                {"action", action},
+                {"timestamp", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")},
+                {"session_id", _currentSession?.sessionId ?? "unknown"}
             };
 
             if (additionalData != null)
@@ -397,7 +399,55 @@ namespace AngryDogs.Tools
                 }
             }
 
+            // Track UI interaction
             TrackEvent("ui_interaction", parameters);
+            
+            // Log potential UI bugs
+            TrackUIBugDetection(uiElement, action, parameters);
+        }
+
+        /// <summary>
+        /// Tracks UI bug detection for quip toggle failures and other UI issues.
+        /// Riley: "Track UI bugs to improve the user experience!"
+        /// </summary>
+        private void TrackUIBugDetection(string uiElement, string action, Dictionary<string, object> parameters)
+        {
+            // Check for common UI bugs
+            if (uiElement.Contains("quip") && action == "toggle")
+            {
+                // Track quip toggle interactions
+                TrackEvent("ui_quip_toggle", new Dictionary<string, object>
+                {
+                    {"ui_element", uiElement},
+                    {"action", action},
+                    {"success", true}, // Assume success unless proven otherwise
+                    {"timestamp", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")}
+                });
+            }
+            
+            if (uiElement.Contains("settings") && action == "save")
+            {
+                // Track settings save interactions
+                TrackEvent("ui_settings_save", new Dictionary<string, object>
+                {
+                    {"ui_element", uiElement},
+                    {"action", action},
+                    {"success", true},
+                    {"timestamp", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")}
+                });
+            }
+            
+            if (uiElement.Contains("language") && action == "change")
+            {
+                // Track language change interactions
+                TrackEvent("ui_language_change", new Dictionary<string, object>
+                {
+                    {"ui_element", uiElement},
+                    {"action", action},
+                    {"new_language", parameters.GetValueOrDefault("new_language", "unknown")},
+                    {"timestamp", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")}
+                });
+            }
         }
 
         /// <summary>
@@ -455,8 +505,122 @@ namespace AngryDogs.Tools
         }
 
         /// <summary>
-        /// Gets analytics statistics.
-        /// Riley: "Get analytics stats!"
+        /// Tracks player retention metrics.
+        /// Riley: "Track player retention to see who keeps coming back!"
+        /// </summary>
+        public void TrackPlayerRetention(string retentionType, Dictionary<string, object> additionalData = null)
+        {
+            var parameters = new Dictionary<string, object>
+            {
+                {"retention_type", retentionType},
+                {"session_id", _currentSession?.sessionId ?? "unknown"},
+                {"timestamp", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")},
+                {"play_time", _currentSession?.totalPlayTime ?? 0f},
+                {"level_reached", _currentSession?.levelReached ?? 0},
+                {"score", _currentSession?.score ?? 0}
+            };
+
+            if (additionalData != null)
+            {
+                foreach (var kvp in additionalData)
+                {
+                    parameters.Add(kvp.Key, kvp.Value);
+                }
+            }
+
+            TrackEvent("player_retention", parameters);
+        }
+
+        /// <summary>
+        /// Tracks daily challenge completion for retention analysis.
+        /// Nibble: "Bark! (Translation: Track daily challenge completion!)"
+        /// </summary>
+        public void TrackDailyChallengeCompletion(string challengeId, string challengeType, int kibbleCoinReward, float completionTime)
+        {
+            TrackEvent("daily_challenge_completion", new Dictionary<string, object>
+            {
+                {"challenge_id", challengeId},
+                {"challenge_type", challengeType},
+                {"kibble_coin_reward", kibbleCoinReward},
+                {"completion_time_seconds", completionTime},
+                {"session_id", _currentSession?.sessionId ?? "unknown"},
+                {"timestamp", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")}
+            });
+        }
+
+        /// <summary>
+        /// Tracks session length for retention analysis.
+        /// Riley: "Track session length to understand player engagement!"
+        /// </summary>
+        public void TrackSessionLength(float sessionLength, string sessionEndReason)
+        {
+            TrackEvent("session_length", new Dictionary<string, object>
+            {
+                {"session_length_seconds", sessionLength},
+                {"session_end_reason", sessionEndReason},
+                {"session_id", _currentSession?.sessionId ?? "unknown"},
+                {"timestamp", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")}
+            });
+        }
+
+        /// <summary>
+        /// Tracks battery usage for mobile optimization.
+        /// Nibble: "Bark! (Translation: Track battery usage!)"
+        /// </summary>
+        public void TrackBatteryUsage(float batteryLevel, bool isCharging, float batteryDrainRate)
+        {
+            if (Application.isMobilePlatform)
+            {
+                TrackEvent("battery_usage", new Dictionary<string, object>
+                {
+                    {"battery_level", batteryLevel},
+                    {"is_charging", isCharging},
+                    {"battery_drain_rate", batteryDrainRate},
+                    {"session_id", _currentSession?.sessionId ?? "unknown"},
+                    {"timestamp", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")}
+                });
+            }
+        }
+
+        /// <summary>
+        /// Tracks localization usage for language preference analysis.
+        /// Riley: "Track localization usage to see which languages are popular!"
+        /// </summary>
+        public void TrackLocalizationUsage(string languageCode, string uiElement, bool isNeonThemed)
+        {
+            TrackEvent("localization_usage", new Dictionary<string, object>
+            {
+                {"language_code", languageCode},
+                {"ui_element", uiElement},
+                {"is_neon_themed", isNeonThemed},
+                {"session_id", _currentSession?.sessionId ?? "unknown"},
+                {"timestamp", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")}
+            });
+        }
+
+        /// <summary>
+        /// Exports analytics data for post-launch analysis.
+        /// Riley: "Export analytics data for analysis!"
+        /// </summary>
+        public string ExportAnalyticsData()
+        {
+            var exportData = new Dictionary<string, object>
+            {
+                {"session_info", _currentSession},
+                {"events_tracked", _eventCount},
+                {"events_in_queue", _eventQueue.Count},
+                {"export_timestamp", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")},
+                {"platform", Application.platform.ToString()},
+                {"version", Application.version},
+                {"device_info", SystemInfo.deviceName}
+            };
+
+            return JsonUtility.ToJson(exportData, true);
+        }
+
+        /// <summary>
+        /// Gets analytics statistics with enhanced retention metrics.
+        /// Riley: "Get enhanced analytics stats!"
         /// </summary>
         public string GetAnalyticsStats()
         {
@@ -468,6 +632,9 @@ namespace AngryDogs.Tools
             stats += $"Score: {_currentSession?.score}\n";
             stats += $"Deaths: {_currentSession?.deaths}\n";
             stats += $"Power-ups Used: {_currentSession?.powerUpsUsed}\n";
+            stats += $"Platform: {Application.platform}\n";
+            stats += $"Version: {Application.version}\n";
+            stats += $"Device: {SystemInfo.deviceName}\n";
             
             return stats;
         }
