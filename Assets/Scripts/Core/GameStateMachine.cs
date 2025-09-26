@@ -9,6 +9,7 @@ namespace AngryDogs.Core
         MainMenu,
         Gameplay,
         Paused,
+        Shop,
         GameOver
     }
 
@@ -22,6 +23,7 @@ namespace AngryDogs.Core
 
         public GameState CurrentState { get; private set; } = GameState.Boot;
 
+        public event Action<GameState> StateChanged;
         public void Register(GameState state, Action onEnter, Action onExit)
         {
             _enterHandlers[state] = onEnter;
@@ -46,6 +48,18 @@ namespace AngryDogs.Core
             {
                 enter?.Invoke();
             }
+
+            StateChanged?.Invoke(CurrentState);
+        }
+
+        public void PauseGameplay()
+        {
+            ChangeState(GameState.Paused);
+        }
+
+        public void ResumeGameplay()
+        {
+            ChangeState(GameState.Gameplay);
         }
     }
 }

@@ -47,19 +47,25 @@ namespace AngryDogs.Enemies
         private float _nextRepathTime;
         private Vector3 _lastKnownRileyPosition;
         private float _attackRangeSqr;
+        private float _repathMovementThresholdSqr;
         private int _isRunningHash;
         private int _biteHash;
+        private int _updateOffset;
+        private float _distanceCheckTimer;
+        private const float DistanceCheckInterval = 0.1f;
 
         private void Awake()
         {
             _agent = GetComponent<NavMeshAgent>();
             _attackRangeSqr = attackRange * attackRange;
+            _repathMovementThresholdSqr = repathMovementThreshold * repathMovementThreshold;
             _isRunningHash = Animator.StringToHash("IsRunning");
             _biteHash = Animator.StringToHash("Bite");
 
             // Mobile-friendly agent defaults: turn off expensive rotation update if animator handles it.
             _agent.updateRotation = false;
             _agent.autoBraking = false;
+            _distanceCheckTimer = DistanceCheckInterval;
         }
 
         private void OnEnable()
@@ -69,6 +75,8 @@ namespace AngryDogs.Enemies
             SetState(HoundState.Chasing);
             _nextRepathTime = Time.time;
             CacheRileyPosition();
+            _updateOffset = _activeCount % 3;
+            _distanceCheckTimer = 0f;
         }
 
         private void OnDisable()
@@ -94,14 +102,17 @@ namespace AngryDogs.Enemies
 
         private void Update()
         {
-            switch (_state)
+            // Stagger chasing logic across frames so 20+ hounds don't all hammer the CPU at once.
+            if (_state == HoundState.Chasing)
             {
-                case HoundState.Chasing:
+                if ((Time.frameCount + _updateOffset) % 3 == 0)
+                {
                     UpdateChasing();
-                    break;
-                case HoundState.Attacking:
-                    UpdateAttacking();
-                    break;
+                }
+            }
+            else if (_state == HoundState.Attacking)
+            {
+                UpdateAttacking();
             }
         }
 
@@ -133,6 +144,16 @@ namespace AngryDogs.Enemies
                 _agent.SetDestination(riley.position);
                 CacheRileyPosition();
                 _nextRepathTime = Time.time + chaseRepathInterval;
+            }
+
+            _distanceCheckTimer -= Time.deltaTime;
+            if (_distanceCheckTimer <= 0f)
+            {
+                _distanceCheckTimer = DistanceCheckInterval;
+            }
+            else
+            {
+                return;
             }
 
             if (Vector3.SqrMagnitude(riley.position - transform.position) <= _attackRangeSqr)
@@ -236,7 +257,7 @@ namespace AngryDogs.Enemies
                 return false;
             }
 
-            if (Vector3.SqrMagnitude(riley.position - _lastKnownRileyPosition) < repathMovementThreshold * repathMovementThreshold)
+            if (Vector3.SqrMagnitude(riley.position - _lastKnownRileyPosition) < _repathMovementThresholdSqr)
             {
                 return false;
             }

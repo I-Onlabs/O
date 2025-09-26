@@ -32,4 +32,8 @@ namespace AngryDogs.Data
             };
         }
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> origin/codex/refactor-prototype-code-for-maintainability-78tl00

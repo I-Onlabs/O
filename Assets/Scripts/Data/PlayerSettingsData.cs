@@ -105,7 +105,10 @@ namespace AngryDogs.Data
         private void EnsureLookup()
         {
             _bindingLookup ??= new Dictionary<string, KeyCode>(StringComparer.Ordinal);
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/codex/refactor-prototype-code-for-maintainability-78tl00
             if (_bindingLookup.Count == keyBindings.Count)
             {
                 return;
@@ -121,4 +124,8 @@ namespace AngryDogs.Data
             }
         }
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> origin/codex/refactor-prototype-code-for-maintainability-78tl00
